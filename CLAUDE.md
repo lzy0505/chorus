@@ -1,5 +1,33 @@
 # Claude Session Orchestrator - Development Guide
 
+## Task Tracking (IMPORTANT)
+
+**Always maintain these files when working on tasks:**
+
+### TODO.md
+- Check `TODO.md` at the start of each session to see current tasks
+- Move tasks between sections as you work:
+  - `In Progress` → what you're actively working on
+  - `Up Next` → priority tasks
+  - `Completed` → finished tasks (add `[x]` prefix)
+- Update after completing any task
+
+### PLAN.md
+- Shows implementation phases and progress
+- Mark items with ✅ when phase/task is complete
+- Mark current phase with 🔄
+- Add notes for decisions, blockers, or context
+
+### Workflow
+1. **Start of session**: Read `TODO.md` and `PLAN.md` to understand current state
+2. **Pick a task**: Move it to "In Progress" in TODO.md
+3. **Complete task**: Move to "Completed", update PLAN.md if needed
+4. **End of session**: Ensure both files reflect current state
+
+The TodoWrite tool syncs with TODO.md via hooks automatically.
+
+---
+
 ## Project Overview
 
 This is a lightweight orchestration system for managing multiple Claude Code sessions working on a single large project. The full specification is in `design.md`.
