@@ -1,0 +1,30 @@
+[project]
+name = "chorus"
+version = "0.1.0"
+description = "Claude Session Orchestrator - manage multiple Claude Code sessions"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests requiring external services (tmux)",
+]
+
+[tool.coverage.run]
+source = ["api", "services", "models", "database"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard" hx-ext="sse" sse-connect="/api/events">
+    <div class="panel">
+        <div class="panel-header">Sessions</div>
+        <div id="sessions" hx-get="/api/sessions" hx-trigger="load, sse:session_status">
+            <p>No sessions yet. Create one to get started.</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header">Tasks</div>
+        <div id="tasks" hx-get="/api/tasks" hx-trigger="load, sse:task_update">
+            <p>No tasks yet. Create one to get started.</p>
+        </div>
+    </div>
+
+    <div class="panel" style="grid-column: span 2;">
+        <div class="panel-header">Documents</div>
+        <div id="documents" hx-get="/api/documents" hx-trigger="load">
+            <p>Loading documents...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
