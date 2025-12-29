@@ -55,6 +55,7 @@ class Task(SQLModel, table=True):
     tmux_session: Optional[str] = Field(default=None)  # e.g., "task-1"
 
     # Claude session state (ephemeral, can be restarted)
+    claude_session_id: Optional[str] = Field(default=None)  # From hook SessionStart
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_restarts: int = Field(default=0)
     last_output: str = Field(default="")  # Last ~2000 chars of terminal output
