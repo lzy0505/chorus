@@ -36,15 +36,15 @@
   - [x] `POST /api/hooks/sessionend` - SessionEnd → claude_status = stopped
   - [x] `POST /api/hooks/notification` - Notification → confirms idle
 
-- [ ] `services/gitbutler.py` - GitButler CLI integration
-  - [ ] `create_stack(name)` - Create stack via `but branch new -j`
-  - [ ] `commit_to_stack(stack)` - Commit to stack via `but commit -c`
-  - [ ] `get_status()` - Get workspace status via `but status -j`
-  - [ ] `delete_stack(stack)` - Delete stack via `but branch delete --force`
-  - [ ] `get_stack_commits(stack)` - Get commits via `but branch show -j`
+- [x] `services/gitbutler.py` - GitButler CLI integration ✅
+  - [x] `create_stack(name)` - Create stack via `but branch new -j`
+  - [x] `commit_to_stack(stack)` - Commit to stack via `but commit -c`
+  - [x] `get_status()` - Get workspace status via `but status -j`
+  - [x] `delete_stack(stack)` - Delete stack via `but branch delete --force`
+  - [x] `get_stack_commits(stack)` - Get commits via `but branch show -j`
 
-- [ ] `api/hooks.py` - Add tooluse endpoint
-  - [ ] `POST /api/hooks/tooluse` - After file edit, commit to task's stack
+- [x] `api/hooks.py` - Add tooluse endpoint ✅
+  - [x] `POST /api/hooks/posttooluse` - After file edit, commit to task's stack
 
 - [ ] `api/tasks.py` - Task lifecycle endpoints
   - [ ] `POST /api/tasks` - Create task

@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 
 from database import get_db
 from models import Task, TaskStatus, ClaudeStatus
+from services.gitbutler import GitButlerService, GitButlerError
 
 router = APIRouter(prefix="/api/hooks", tags=["hooks"])
 
@@ -26,6 +27,20 @@ class HookEventPayload(BaseModel):
 
     session_id: str
     hook_event_name: str
+    transcript_path: Optional[str] = None
+    cwd: Optional[str] = None
+
+
+class ToolUsePayload(BaseModel):
+    """Payload for PostToolUse hook events.
+
+    Contains additional tool-specific information.
+    """
+
+    session_id: str
+    hook_event_name: str = "PostToolUse"
+    tool_name: Optional[str] = None
+    tool_input: Optional[dict] = None
     transcript_path: Optional[str] = None
     cwd: Optional[str] = None
 
@@ -252,3 +267,66 @@ async def hook_notification(
         task_id=task.id,
         message=f"Task {task.id} notification received",
     )
+
+
+# File-editing tools that should trigger auto-commit
+FILE_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+
+
+@router.post("/posttooluse", response_model=HookResponse)
+async def hook_post_tool_use(
+    payload: ToolUsePayload,
+    db: Session = Depends(get_db),
+) -> HookResponse:
+    """Handle Claude PostToolUse hook event.
+
+    After Claude executes a file-editing tool, commit the changes
+    to the task's GitButler stack.
+    """
+    # Only commit for file-editing tools
+    if payload.tool_name and payload.tool_name not in FILE_EDIT_TOOLS:
+        return HookResponse(
+            status="skipped",
+            message=f"Tool '{payload.tool_name}' is not a file-editing tool",
+        )
+
+    task = find_task_by_session_id(db, payload.session_id)
+
+    if not task:
+        return HookResponse(
+            status="ignored",
+            message=f"No task found for session {payload.session_id}",
+        )
+
+    # Check if task has a stack assigned
+    if not task.stack_name:
+        return HookResponse(
+            status="ignored",
+            task_id=task.id,
+            message=f"Task {task.id} has no GitButler stack assigned",
+        )
+
+    # Commit changes to the task's stack
+    try:
+        gitbutler = GitButlerService()
+        commit = gitbutler.commit_to_stack(task.stack_name)
+
+        if commit:
+            return HookResponse(
+                status="ok",
+                task_id=task.id,
+                message=f"Committed to stack '{task.stack_name}': {commit.commit_id[:8]}",
+            )
+        else:
+            return HookResponse(
+                status="ok",
+                task_id=task.id,
+                message=f"No changes to commit to stack '{task.stack_name}'",
+            )
+
+    except GitButlerError as e:
+        return HookResponse(
+            status="error",
+            task_id=task.id,
+            message=f"GitButler error: {str(e)}",
+        )

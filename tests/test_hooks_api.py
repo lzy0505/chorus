@@ -1,9 +1,11 @@
 """Tests for Claude Code hooks API endpoints."""
 
 import pytest
+from unittest.mock import patch, MagicMock
 from sqlmodel import Session
 
 from models import Task, TaskStatus, ClaudeStatus
+from services.gitbutler import Commit, GitButlerError
 
 
 class TestHookSessionStart:
@@ -389,6 +391,7 @@ class TestHookEndpointRouting:
             "/api/hooks/permissionrequest",
             "/api/hooks/sessionend",
             "/api/hooks/notification",
+            "/api/hooks/posttooluse",
         ]
 
         for endpoint in endpoints:
@@ -423,3 +426,345 @@ class TestHookEndpointRouting:
         )
 
         assert response.status_code == 200
+
+
+class TestHookPostToolUse:
+    """Tests for POST /api/hooks/posttooluse endpoint."""
+
+    @patch("api.hooks.GitButlerService")
+    def test_commits_on_file_edit(self, mock_gb_class, client, engine):
+        """Test that file edit triggers commit to task's stack."""
+        # Setup mock
+        mock_commit = Commit(
+            cli_id="c1",
+            commit_id="abc123def456",
+            message="Auto commit",
+            author_name="User",
+            author_email="user@test.com",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = mock_commit
+        mock_gb_class.return_value = mock_service
+
+        # Create task with stack
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-edit",
+                stack_name="task-1-feature",
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            task_id = task.id
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-edit",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["task_id"] == task_id
+        assert "abc123de" in data["message"]  # Commit ID prefix
+
+        # Verify GitButler was called
+        mock_service.commit_to_stack.assert_called_once_with("task-1-feature")
+
+    @patch("api.hooks.GitButlerService")
+    def test_commits_on_write_tool(self, mock_gb_class, client, engine):
+        """Test that Write tool triggers commit."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = Commit(
+            cli_id="c1", commit_id="xyz789", message="", author_name="",
+            author_email="", created_at=""
+        )
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-write",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-write",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Write",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        mock_service.commit_to_stack.assert_called_once()
+
+    def test_skips_non_file_edit_tools(self, client, engine):
+        """Test that non-file-editing tools are skipped."""
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-bash",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-bash",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "skipped"
+        assert "not a file-editing tool" in data["message"]
+
+    def test_skips_read_tool(self, client, engine):
+        """Test that Read tool is skipped."""
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-read",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-read",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "skipped"
+
+    def test_ignores_unknown_session(self, client):
+        """Test that unknown session is ignored."""
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "unknown-session",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ignored"
+
+    def test_ignores_task_without_stack(self, client, engine):
+        """Test that task without stack is ignored."""
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-no-stack",
+                stack_name=None,  # No stack assigned
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            task_id = task.id
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-no-stack",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ignored"
+        assert data["task_id"] == task_id
+        assert "no GitButler stack" in data["message"]
+
+    @patch("api.hooks.GitButlerService")
+    def test_handles_nothing_to_commit(self, mock_gb_class, client, engine):
+        """Test handling when there are no changes to commit."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = None  # No commit
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-empty",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            task_id = task.id
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-empty",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["task_id"] == task_id
+        assert "No changes to commit" in data["message"]
+
+    @patch("api.hooks.GitButlerService")
+    def test_handles_gitbutler_error(self, mock_gb_class, client, engine):
+        """Test handling of GitButler errors."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.side_effect = GitButlerError("Stack not found")
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-error",
+                stack_name="missing-stack",
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            task_id = task.id
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-error",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "error"
+        assert data["task_id"] == task_id
+        assert "GitButler error" in data["message"]
+
+    @patch("api.hooks.GitButlerService")
+    def test_commits_without_tool_name(self, mock_gb_class, client, engine):
+        """Test that missing tool_name still triggers commit."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = Commit(
+            cli_id="c1", commit_id="abc123", message="", author_name="",
+            author_email="", created_at=""
+        )
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-no-tool",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-no-tool",
+                "hook_event_name": "PostToolUse",
+                # No tool_name provided
+            },
+        )
+
+        assert response.status_code == 200
+        # Without tool_name, we commit (conservative approach)
+        assert response.json()["status"] == "ok"
+
+    @patch("api.hooks.GitButlerService")
+    def test_commits_on_multi_edit(self, mock_gb_class, client, engine):
+        """Test that MultiEdit tool triggers commit."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = Commit(
+            cli_id="c1", commit_id="multi123", message="", author_name="",
+            author_email="", created_at=""
+        )
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-multi",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-multi",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "MultiEdit",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+    @patch("api.hooks.GitButlerService")
+    def test_commits_on_notebook_edit(self, mock_gb_class, client, engine):
+        """Test that NotebookEdit tool triggers commit."""
+        mock_service = MagicMock()
+        mock_service.commit_to_stack.return_value = Commit(
+            cli_id="c1", commit_id="nb123", message="", author_name="",
+            author_email="", created_at=""
+        )
+        mock_gb_class.return_value = mock_service
+
+        with Session(engine) as db:
+            task = Task(
+                title="Test Task",
+                status=TaskStatus.running,
+                claude_session_id="session-notebook",
+                stack_name="my-stack",
+            )
+            db.add(task)
+            db.commit()
+
+        response = client.post(
+            "/api/hooks/posttooluse",
+            json={
+                "session_id": "session-notebook",
+                "hook_event_name": "PostToolUse",
+                "tool_name": "NotebookEdit",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
