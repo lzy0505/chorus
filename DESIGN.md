@@ -113,6 +113,7 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 | `status` | enum | `pending`, `running`, `waiting`, `completed`, `failed` |
 | `branch_name` | string? | GitButler branch name, nullable until started |
 | `tmux_session` | string? | tmux session ID, nullable until started |
+| `claude_session_id` | string? | Claude Code session ID (from hooks), nullable |
 | `claude_status` | enum | `stopped`, `starting`, `idle`, `busy`, `waiting` |
 | `claude_restarts` | int | Number of times Claude was restarted in this task |
 | `last_output` | string | Last ~2000 chars of terminal output |
@@ -441,38 +442,58 @@ data: {"document_id": 1, "path": "docs/spec.md"}
 
 ## Component Implementation Details
 
-### Task Monitor
+### Hook Handler Service
 
-**Purpose:** Background task polling tmux sessions for all running tasks.
+**Purpose:** Receive Claude Code hook events and update task status in real-time.
 
-**Implementation:**
+**Architecture:**
+
+```
+Claude Code (in tmux) → Hook fires → curl POST → Chorus API → Update task → SSE to dashboard
+```
+
+**API Endpoints:**
 
 ```python
-async def monitor_loop():
-    while True:
-        tasks = get_running_tasks()
-        for task in tasks:
-            output = capture_tmux_output(task.tmux_session)
-            claude_status, permission = detect_status(output)
+@router.post("/api/hooks/start")
+async def hook_session_start(payload: HookPayload):
+    """Claude session started - map session_id to task"""
+    task = find_task_by_tmux(payload.cwd)
+    task.claude_session_id = payload.session_id
+    task.claude_status = "idle"
+    emit_event("claude_status", task)
 
-            if claude_status != task.claude_status:
-                emit_event("claude_status", {...})
+@router.post("/api/hooks/stop")
+async def hook_stop(payload: HookPayload):
+    """Claude finished responding - now idle"""
+    task = find_task_by_session(payload.session_id)
+    task.claude_status = "idle"
+    emit_event("claude_status", task)
 
-                if claude_status == "waiting":
-                    send_desktop_notification(task.title, permission)
-                    task.status = "waiting"
-                    emit_event("task_status", {...})
-                elif task.status == "waiting" and claude_status in ["idle", "busy"]:
-                    task.status = "running"
-                    emit_event("task_status", {...})
+@router.post("/api/hooks/permission")
+async def hook_permission(payload: HookPayload):
+    """Claude waiting for permission"""
+    task = find_task_by_session(payload.session_id)
+    task.claude_status = "waiting"
+    task.status = "waiting"
+    task.permission_prompt = extract_prompt(payload.transcript_path)
+    send_desktop_notification(task.title, task.permission_prompt)
+    emit_event("task_status", task)
 
-            task.claude_status = claude_status
-            task.permission_prompt = permission
-            task.last_output = output[-2000:]
-            save(task)
-
-        await asyncio.sleep(1)
+@router.post("/api/hooks/end")
+async def hook_session_end(payload: HookPayload):
+    """Claude session ended"""
+    task = find_task_by_session(payload.session_id)
+    task.claude_status = "stopped"
+    task.claude_session_id = None
+    emit_event("claude_status", task)
 ```
+
+**Benefits over polling:**
+- Instant status updates (no 1s delay)
+- No terminal output parsing
+- Deterministic event detection
+- Lower resource usage
 
 ### GitButler Integration
 
@@ -512,36 +533,61 @@ tmux send-keys -t task-{id} C-c
 tmux kill-session -t task-{id}
 ```
 
-### Status Detection Patterns
+### Claude Code Hooks Integration
 
-```python
-CLAUDE_IDLE = [
-    r">\s*$",           # Claude's input prompt
-    r"claude>\s*$",     # Alternative prompt
-]
+Instead of polling terminal output, we use Claude Code's native hooks system for deterministic status detection.
 
-CLAUDE_WAITING = [
-    r"\(y/n\)",         # Yes/no prompt
-    r"Allow\?",         # Permission request
-    r"Do you want to",  # Confirmation
-    r"Proceed\?",       # Proceed prompt
-]
+**Hook Events Used:**
 
-def detect_status(output: str) -> tuple[str, str | None]:
-    lines = output.strip().split("\n")[-20:]
-    text = "\n".join(lines)
+| Event | Fires When | Status Change |
+|-------|------------|---------------|
+| `SessionStart` | Claude launches | `stopped` → `starting` → `idle` |
+| `Stop` | Claude finishes responding | `busy` → `idle` |
+| `PermissionRequest` | Permission dialog shown | → `waiting` |
+| `Notification` (idle_prompt) | Idle 60+ seconds | confirms `idle` |
+| `SessionEnd` | Claude exits | → `stopped` |
 
-    for pattern in CLAUDE_WAITING:
-        if re.search(pattern, text, re.IGNORECASE):
-            # Extract the permission prompt
-            return ("waiting", extract_prompt(lines))
+**Hook Configuration:**
 
-    for pattern in CLAUDE_IDLE:
-        if re.search(pattern, lines[-1] if lines else ""):
-            return ("idle", None)
+Each task generates a `.claude/settings.json` with hooks that POST to Chorus:
 
-    return ("busy", None)
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "type": "command",
+      "command": "curl -sX POST http://localhost:8000/api/hooks/stop -d '{\"session_id\":\"$SESSION_ID\"}'"
+    }],
+    "PermissionRequest": [{
+      "type": "command",
+      "command": "curl -sX POST http://localhost:8000/api/hooks/permission -d '{\"session_id\":\"$SESSION_ID\"}'"
+    }],
+    "SessionStart": [{
+      "type": "command",
+      "command": "curl -sX POST http://localhost:8000/api/hooks/start -d '{\"session_id\":\"$SESSION_ID\"}'"
+    }],
+    "SessionEnd": [{
+      "type": "command",
+      "command": "curl -sX POST http://localhost:8000/api/hooks/end -d '{\"session_id\":\"$SESSION_ID\"}'"
+    }]
+  }
+}
 ```
+
+**Hook Payload (received via stdin):**
+
+```json
+{
+  "session_id": "abc123",
+  "hook_event_name": "Stop",
+  "transcript_path": "/Users/.../.claude/projects/.../session.jsonl",
+  "cwd": "/path/to/project"
+}
+```
+
+**Session-to-Task Mapping:**
+
+Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming hook events with tasks. The hook handler script reads JSON from stdin and forwards it to the Chorus API.
 
 ---
 
@@ -616,13 +662,13 @@ def detect_status(output: str) -> tuple[str, str | None]:
 - [x] Database setup
 - [x] tmux service wrapper
 
-### Phase 2: Task API + Monitor (Priority: tmux focus)
-- [ ] Update models.py with new Task fields
-- [ ] `services/detector.py` - Status detection patterns
+### Phase 2: Task API + Hooks (Priority: tmux + hooks)
+- [x] `services/tmux.py` - Task-centric tmux operations
+- [ ] `services/hooks.py` - Hook config generation + handler script
+- [ ] `api/hooks.py` - Hook event endpoints (start/stop/permission/end)
 - [ ] `services/gitbutler.py` - GitButler MCP integration
 - [ ] `api/tasks.py` - Full task lifecycle endpoints
-- [ ] `services/monitor.py` - Task polling loop
-- [ ] `api/events.py` - SSE endpoint
+- [ ] `api/events.py` - SSE endpoint for real-time updates
 
 ### Phase 3: Document API
 - [ ] `services/documents.py` - Document manager
