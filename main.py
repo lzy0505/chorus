@@ -1,6 +1,9 @@
 """Entry point for Chorus - Task-centric Claude orchestration."""
 
+import argparse
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -8,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
-from config import HOST, PORT
+from config import load_config, set_config, get_config
 from database import create_db_and_tables
 
 
@@ -60,5 +63,38 @@ app.include_router(dashboard_router)
 app.include_router(events_router)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        prog="chorus",
+        description="Task-centric orchestration for multiple Claude Code sessions",
+    )
+    parser.add_argument(
+        "config",
+        type=Path,
+        help="Path to TOML configuration file (e.g., chorus.toml)",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Main entry point."""
+    args = parse_args()
+
+    if not args.config.exists():
+        print(f"Error: Config file not found: {args.config}", file=sys.stderr)
+        sys.exit(1)
+
+    config = load_config(args.config)
+    set_config(config)
+
+    uvicorn.run(
+        "main:app",
+        host=config.server.host,
+        port=config.server.port,
+        reload=True,
+    )
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+    main()

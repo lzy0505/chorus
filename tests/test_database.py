@@ -2,7 +2,7 @@
 
 from sqlmodel import Session, select
 
-from database import create_db_and_tables, get_db, engine
+from database import create_db_and_tables, get_db, get_engine
 from models import Task, Document, DocumentReference
 
 
@@ -16,6 +16,7 @@ class TestDatabaseSetup:
 
     def test_engine_exists(self):
         """Test database engine is configured."""
+        engine = get_engine()
         assert engine is not None
 
 

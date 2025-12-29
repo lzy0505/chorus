@@ -10,9 +10,19 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, Session, create_engine
 from sqlmodel.pool import StaticPool
 
-# Set test environment before importing app modules
-os.environ["DATABASE_URL"] = "sqlite://"
-os.environ["PROJECT_ROOT"] = tempfile.mkdtemp()
+# Set up test config before importing any app modules
+from config import Config, ServerConfig, DatabaseConfig, TmuxConfig, StatusPatterns, set_config
+
+# Create test config with in-memory database
+_test_project_root = Path(tempfile.mkdtemp())
+_test_config = Config(
+    server=ServerConfig(host="127.0.0.1", port=8000),
+    database=DatabaseConfig(url="sqlite://"),
+    tmux=TmuxConfig(session_prefix="test-claude", poll_interval=0.1),
+    editor="vim",
+    project_root=_test_project_root,
+)
+set_config(_test_config)
 
 
 @pytest.fixture(name="engine")

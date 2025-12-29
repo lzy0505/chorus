@@ -1,48 +1,177 @@
 """Configuration settings for Claude Session Orchestrator."""
 
 import os
+import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-# Project being managed
-PROJECT_ROOT = Path(os.environ.get("PROJECT_ROOT", os.getcwd()))
 
-# tmux settings
-SESSION_PREFIX = os.environ.get("SESSION_PREFIX", "claude")
+@dataclass
+class ServerConfig:
+    """Server configuration."""
+    host: str = "127.0.0.1"
+    port: int = 8000
 
-# Polling interval for session monitoring (seconds)
-POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "1.0"))
 
-# Database
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///orchestrator.db")
+@dataclass
+class DatabaseConfig:
+    """Database configuration."""
+    url: str = "sqlite:///orchestrator.db"
 
-# Server settings
-HOST = os.environ.get("HOST", "127.0.0.1")
-PORT = int(os.environ.get("PORT", "8000"))
 
-# External editor
-EDITOR = os.environ.get("EDITOR", "vim")
+@dataclass
+class TmuxConfig:
+    """Tmux session configuration."""
+    session_prefix: str = "claude"
+    poll_interval: float = 1.0
 
-# Document discovery patterns
-DOCUMENT_PATTERNS = [
-    "*.md",
-    "docs/**/*.md",
-    ".claude/**/*.md",
-    "plans/**/*.md",
-    "specs/**/*.md",
-]
 
-# Status detection patterns
-STATUS_PATTERNS = {
-    "idle": [
+@dataclass
+class StatusPatterns:
+    """Status detection patterns."""
+    idle: list[str] = field(default_factory=lambda: [
         r">\s*$",
         r"claude>\s*$",
-    ],
-    "waiting": [
+    ])
+    waiting: list[str] = field(default_factory=lambda: [
         r"\(y/n\)",
         r"Allow\?",
         r"Do you want to",
         r"Proceed\?",
         r"Press Enter",
         r"Continue\?",
-    ],
-}
+    ])
+
+
+@dataclass
+class Config:
+    """Main configuration container."""
+    server: ServerConfig = field(default_factory=ServerConfig)
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    tmux: TmuxConfig = field(default_factory=TmuxConfig)
+    editor: str = "vim"
+    document_patterns: list[str] = field(default_factory=lambda: [
+        "*.md",
+        "docs/**/*.md",
+        ".claude/**/*.md",
+        "plans/**/*.md",
+        "specs/**/*.md",
+    ])
+    status_patterns: StatusPatterns = field(default_factory=StatusPatterns)
+
+    # Dynamic - always from environment
+    project_root: Path = field(default_factory=lambda: Path(os.environ.get("PROJECT_ROOT", os.getcwd())))
+
+
+def _get_nested(data: dict, *keys: str, default: Any = None) -> Any:
+    """Get nested value from dict."""
+    for key in keys:
+        if not isinstance(data, dict):
+            return default
+        data = data.get(key, {})
+    return data if data != {} else default
+
+
+def load_config(config_path: Path | str) -> Config:
+    """Load configuration from TOML file.
+
+    Args:
+        config_path: Path to the TOML configuration file.
+
+    Returns:
+        Config object with loaded settings.
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist.
+        tomllib.TOMLDecodeError: If config file is invalid TOML.
+    """
+    config_path = Path(config_path)
+    with open(config_path, "rb") as f:
+        data = tomllib.load(f)
+
+    return Config(
+        server=ServerConfig(
+            host=_get_nested(data, "server", "host", default="127.0.0.1"),
+            port=int(_get_nested(data, "server", "port", default=8000)),
+        ),
+        database=DatabaseConfig(
+            url=_get_nested(data, "database", "url", default="sqlite:///orchestrator.db"),
+        ),
+        tmux=TmuxConfig(
+            session_prefix=_get_nested(data, "tmux", "session_prefix", default="claude"),
+            poll_interval=float(_get_nested(data, "tmux", "poll_interval", default=1.0)),
+        ),
+        editor=_get_nested(data, "editor", "command", default="vim"),
+        document_patterns=_get_nested(data, "documents", "patterns", default=[
+            "*.md",
+            "docs/**/*.md",
+            ".claude/**/*.md",
+            "plans/**/*.md",
+            "specs/**/*.md",
+        ]),
+        status_patterns=StatusPatterns(
+            idle=_get_nested(data, "status", "idle", "patterns", default=[
+                r">\s*$",
+                r"claude>\s*$",
+            ]),
+            waiting=_get_nested(data, "status", "waiting", "patterns", default=[
+                r"\(y/n\)",
+                r"Allow\?",
+                r"Do you want to",
+                r"Proceed\?",
+                r"Press Enter",
+                r"Continue\?",
+            ]),
+        ),
+    )
+
+
+def default_config() -> Config:
+    """Create configuration with default values."""
+    return Config()
+
+
+# Global config instance - set by main.py at startup
+_config: Config | None = None
+
+
+def get_config() -> Config:
+    """Get the current configuration.
+
+    Returns:
+        The current Config instance.
+
+    Raises:
+        RuntimeError: If config hasn't been initialized.
+    """
+    if _config is None:
+        raise RuntimeError("Configuration not initialized. Call set_config() first.")
+    return _config
+
+
+def set_config(config: Config) -> None:
+    """Set the global configuration instance."""
+    global _config
+    _config = config
+
+
+# Legacy exports for backwards compatibility during migration
+# These will raise RuntimeError if accessed before config is set
+def __getattr__(name: str) -> Any:
+    """Provide backwards-compatible access to config values."""
+    legacy_map = {
+        "PROJECT_ROOT": lambda c: c.project_root,
+        "SESSION_PREFIX": lambda c: c.tmux.session_prefix,
+        "POLL_INTERVAL": lambda c: c.tmux.poll_interval,
+        "DATABASE_URL": lambda c: c.database.url,
+        "HOST": lambda c: c.server.host,
+        "PORT": lambda c: c.server.port,
+        "EDITOR": lambda c: c.editor,
+        "DOCUMENT_PATTERNS": lambda c: c.document_patterns,
+        "STATUS_PATTERNS": lambda c: {"idle": c.status_patterns.idle, "waiting": c.status_patterns.waiting},
+    }
+
+    if name in legacy_map:
+        return legacy_map[name](get_config())
+    raise AttributeError(f"module 'config' has no attribute {name!r}")

@@ -1,0 +1,42 @@
+# Chorus Configuration
+# Server configuration for the Chorus orchestrator.
+# tmux sessions use environment variables as needed.
+
+[server]
+host = "127.0.0.1"
+port = 8000
+
+[database]
+url = "sqlite:///orchestrator.db"
+
+[tmux]
+session_prefix = "claude"
+poll_interval = 1.0
+
+[editor]
+command = "vim"
+
+[documents]
+patterns = [
+    "*.md",
+    "docs/**/*.md",
+    ".claude/**/*.md",
+    "plans/**/*.md",
+    "specs/**/*.md",
+]
+
+[status.idle]
+patterns = [
+    '>\\s*$',
+    'claude>\\s*$',
+]
+
+[status.waiting]
+patterns = [
+    '\\(y/n\\)',
+    'Allow\\?',
+    'Do you want to',
+    'Proceed\\?',
+    'Press Enter',
+    'Continue\\?',
+]

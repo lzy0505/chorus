@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from config import HOST, PORT
+from config import get_config
 
 
 @dataclass
@@ -50,7 +50,8 @@ class HookPayload:
 
 def get_chorus_url() -> str:
     """Get the base URL for the Chorus API."""
-    return f"http://{HOST}:{PORT}"
+    config = get_config()
+    return f"http://{config.server.host}:{config.server.port}"
 
 
 def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dict:
@@ -220,11 +221,13 @@ class HooksService:
         """Initialize the hooks service.
 
         Args:
-            project_root: Project root directory. Defaults to config PROJECT_ROOT.
+            project_root: Project root directory. Defaults to config project_root.
             chorus_url: Override the Chorus API URL.
         """
-        from config import PROJECT_ROOT
-        self.project_root = project_root or PROJECT_ROOT
+        if project_root is None:
+            config = get_config()
+            project_root = config.project_root
+        self.project_root = project_root
         self.chorus_url = chorus_url
 
     def setup_hooks(self, task_id: int) -> Path:
