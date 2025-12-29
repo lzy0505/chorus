@@ -1,5 +1,33 @@
 # Chorus — Task-Centric Claude Session Orchestrator
 
+## GitButler Workflow (MANDATORY)
+
+**CRITICAL: This workflow MUST be followed for this project.**
+
+### After ANY code changes:
+1. GitButler hooks automatically sync changes via `but claude post-tool`
+2. GitButler manages all commits and branches
+
+### NEVER use these git commands directly:
+- `git commit` - BLOCKED
+- `git push` - BLOCKED
+- `git stash` - BLOCKED
+- `git rebase` - BLOCKED
+- `git merge` - BLOCKED
+- `git reset` - BLOCKED
+- `git cherry-pick` - BLOCKED
+
+### Allowed git commands (read-only):
+- `git status` - OK
+- `git diff` - OK
+- `git log` - OK
+- `git add` - OK (staging only)
+
+### Why GitButler?
+GitButler provides virtual branches and better commit management. Direct git commands bypass this system and can cause conflicts.
+
+---
+
 ## Task Tracking (IMPORTANT)
 
 **Always maintain these files when working on tasks:**
@@ -55,7 +83,7 @@ Task = tmux process + GitButler branch + ephemeral Claude sessions
 
 - Run `uv run python main.py` to start the dev server
 - API docs available at http://localhost:8000/docs
-- After code changes, run `gitbutler mcp update_branches` (do NOT use git commit)
+- GitButler hooks automatically sync changes (do NOT use git commit directly)
 
 ## Project Structure
 
@@ -139,13 +167,10 @@ WAITING: r"\(y/n\)", r"Allow\?", r"Do you want to"
 
 ### GitButler Integration
 
-```bash
-# Create feature branch for task
-gitbutler mcp create_branch --name "feat/{task-slug}"
-
-# Commit on task completion
-gitbutler mcp update_branches
-```
+GitButler hooks are configured in `.claude/settings.local.json`:
+- `but claude pre-tool` - runs before Edit/Write operations
+- `but claude post-tool` - syncs changes after Edit/Write operations
+- `but claude stop` - runs when Claude session stops
 
 ## Implementation Phases
 
