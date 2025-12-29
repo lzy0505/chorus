@@ -74,6 +74,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Path to TOML configuration file (e.g., chorus.toml)",
     )
+    parser.add_argument(
+        "project",
+        type=Path,
+        help="Absolute path to the project directory to manage",
+    )
     return parser.parse_args()
 
 
@@ -85,7 +90,15 @@ def main() -> None:
         print(f"Error: Config file not found: {args.config}", file=sys.stderr)
         sys.exit(1)
 
-    config = load_config(args.config)
+    if not args.project.is_absolute():
+        print(f"Error: Project path must be absolute: {args.project}", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.project.is_dir():
+        print(f"Error: Project path is not a directory: {args.project}", file=sys.stderr)
+        sys.exit(1)
+
+    config = load_config(args.config, project_root=args.project)
     set_config(config)
 
     uvicorn.run(

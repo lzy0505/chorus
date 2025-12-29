@@ -24,8 +24,8 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 # Install dependencies
 uv sync
 
-# Start the server with config file
-uv run python main.py chorus.toml
+# Start the server with config file and project path
+uv run python main.py chorus.toml /absolute/path/to/project
 
 # Open dashboard
 open http://localhost:8000
@@ -33,7 +33,11 @@ open http://localhost:8000
 
 ## Configuration
 
-Chorus uses a TOML configuration file. Create a `chorus.toml`:
+Chorus requires two arguments:
+1. **Config file** - TOML file with server settings
+2. **Project path** - Absolute path to the project directory to manage
+
+Create a `chorus.toml`:
 
 ```toml
 [server]
@@ -64,7 +68,7 @@ patterns = ['>\\s*$', 'claude>\\s*$']
 patterns = ['\\(y/n\\)', 'Allow\\?', 'Continue\\?']
 ```
 
-The `PROJECT_ROOT` environment variable is still used to specify the target project directory (defaults to cwd). tmux sessions use environment variables as needed for Claude Code.
+Each Chorus instance manages a single project. tmux sessions use environment variables as needed for Claude Code.
 
 ## Development
 
@@ -75,8 +79,8 @@ uv run pytest
 # Run with coverage
 uv run pytest --cov
 
-# Start dev server
-uv run python main.py chorus.toml
+# Start dev server (from chorus directory, managing itself)
+uv run python main.py chorus.toml "$(pwd)"
 ```
 
 ## Documentation

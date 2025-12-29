@@ -1,6 +1,5 @@
 """Configuration settings for Claude Session Orchestrator."""
 
-import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,9 +58,7 @@ class Config:
         "specs/**/*.md",
     ])
     status_patterns: StatusPatterns = field(default_factory=StatusPatterns)
-
-    # Dynamic - always from environment
-    project_root: Path = field(default_factory=lambda: Path(os.environ.get("PROJECT_ROOT", os.getcwd())))
+    project_root: Path = field(default_factory=lambda: Path.cwd())
 
 
 def _get_nested(data: dict, *keys: str, default: Any = None) -> Any:
@@ -73,11 +70,12 @@ def _get_nested(data: dict, *keys: str, default: Any = None) -> Any:
     return data if data != {} else default
 
 
-def load_config(config_path: Path | str) -> Config:
+def load_config(config_path: Path | str, project_root: Path | str) -> Config:
     """Load configuration from TOML file.
 
     Args:
         config_path: Path to the TOML configuration file.
+        project_root: Absolute path to the project directory.
 
     Returns:
         Config object with loaded settings.
@@ -87,10 +85,13 @@ def load_config(config_path: Path | str) -> Config:
         tomllib.TOMLDecodeError: If config file is invalid TOML.
     """
     config_path = Path(config_path)
+    project_root = Path(project_root)
+
     with open(config_path, "rb") as f:
         data = tomllib.load(f)
 
     return Config(
+        project_root=project_root,
         server=ServerConfig(
             host=_get_nested(data, "server", "host", default="127.0.0.1"),
             port=int(_get_nested(data, "server", "port", default=8000)),
