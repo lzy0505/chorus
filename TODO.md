@@ -23,9 +23,8 @@
   - [ ] `POST /api/tasks/{id}/complete` - Complete task
   - [ ] `POST /api/tasks/{id}/fail` - Fail task
 
-### Task Monitor
-- [ ] Implement `services/monitor.py` - Async polling loop
-- [ ] Implement `api/events.py` - SSE endpoint
+### SSE Events
+- [ ] Implement `api/events.py` - SSE endpoint for real-time updates
 
 ## Backlog
 

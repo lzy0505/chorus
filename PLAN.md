@@ -11,9 +11,9 @@
 - [x] Database setup
 - [x] tmux service wrapper (basic commands)
 
-### Phase 2: Task API + Monitor 🔄
+### Phase 2: Task API + Hooks 🔄
 
-**Priority: tmux and task lifecycle management**
+**Priority: tmux, hooks, and task lifecycle management**
 
 - [x] Update `services/tmux.py` - Task-centric tmux operations ✅
   - [x] `create_task_session(task_id)` - Create tmux for a task
@@ -23,10 +23,16 @@
   - [x] `capture_output(task_id)` - Get terminal output
   - [x] `send_keys(task_id, text)` - Send input to Claude
 
-- [ ] `services/detector.py` - Claude status detection
-  - [ ] `detect_claude_status(output)` → (ClaudeStatus, permission_prompt)
-  - [ ] Idle patterns: `>`, `claude>`
-  - [ ] Waiting patterns: `(y/n)`, `Allow?`, etc.
+- [ ] `services/hooks.py` - Claude Code hooks integration
+  - [ ] `generate_hooks_config(task_id)` - Generate .claude/settings.json for task
+  - [ ] `hook_handler.py` script - Reads stdin JSON, POSTs to Chorus API
+  - [ ] Session-to-task mapping via `claude_session_id`
+
+- [ ] `api/hooks.py` - Hook event endpoints
+  - [ ] `POST /api/hooks/start` - SessionStart event → map session to task
+  - [ ] `POST /api/hooks/stop` - Stop event → claude_status = idle
+  - [ ] `POST /api/hooks/permission` - PermissionRequest → status = waiting
+  - [ ] `POST /api/hooks/end` - SessionEnd → claude_status = stopped
 
 - [ ] `services/gitbutler.py` - GitButler MCP integration
   - [ ] `create_branch(name)` - Create feature branch
@@ -44,12 +50,6 @@
   - [ ] `POST /api/tasks/{id}/complete` - Complete task (commit + cleanup)
   - [ ] `POST /api/tasks/{id}/fail` - Mark task as failed
   - [ ] `DELETE /api/tasks/{id}` - Delete pending/failed task
-
-- [ ] `services/monitor.py` - Task polling loop
-  - [ ] Async polling every 1 second
-  - [ ] Detect Claude status changes
-  - [ ] Update task.claude_status
-  - [ ] Emit SSE events
 
 - [ ] `api/events.py` - SSE endpoint
   - [ ] Event queue
@@ -92,7 +92,18 @@
 
 ## Notes
 
-### Architecture Decision (2025-12-29)
+### Architecture Decision: Hooks over Polling (2025-12-29)
+Changed from terminal polling to Claude Code hooks for status detection:
+- **Before**: Poll tmux output every 1s, regex pattern matching for status
+- **After**: Claude Code hooks fire events, POST to Chorus API instantly
+
+Benefits:
+- Instant status updates (no 1s polling delay)
+- Deterministic events (no fragile pattern matching)
+- Lower resource usage
+- Access to session metadata (transcript_path, session_id)
+
+### Architecture Decision: Task-Centric (2025-12-29)
 Changed from session-centric to task-centric design:
 - **Before**: Session (tmux) was primary, Task was assigned to Session
 - **After**: Task is primary, each Task has its own tmux + GitButler branch
