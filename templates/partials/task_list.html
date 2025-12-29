@@ -1,0 +1,7 @@
+{% if tasks %}
+{% for task in tasks %}
+{% include "partials/task_item.html" %}
+{% endfor %}
+{% else %}
+<p class="muted">No tasks yet. Create one above!</p>
+{% endif %}

@@ -2,25 +2,34 @@
 
 {% block content %}
 <div class="dashboard" hx-ext="sse" sse-connect="/api/events">
-    <div class="panel">
-        <div class="panel-header">Sessions</div>
-        <div id="sessions" hx-get="/api/sessions" hx-trigger="load, sse:session_status">
-            <p>No sessions yet. Create one to get started.</p>
+    <!-- New Task Form -->
+    <div class="panel new-task-panel">
+        <form hx-post="/api/tasks" hx-target="#task-list" hx-swap="afterbegin" hx-on::after-request="this.reset()">
+            <input type="text" name="title" placeholder="New task title..." class="task-input" required>
+            <button type="submit" class="btn btn-primary">+ Add Task</button>
+        </form>
+    </div>
+
+    <!-- Task List -->
+    <div class="panel task-panel">
+        <div class="panel-header">
+            <span>Tasks</span>
+            <div class="filter-tabs">
+                <button class="tab active" hx-get="/dashboard/tasks" hx-target="#task-list">All</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=running" hx-target="#task-list">Running</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=pending" hx-target="#task-list">Pending</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=completed" hx-target="#task-list">Completed</button>
+            </div>
+        </div>
+        <div id="task-list" hx-get="/dashboard/tasks" hx-trigger="load, sse:task_update">
+            <p class="loading">Loading tasks...</p>
         </div>
     </div>
 
-    <div class="panel">
-        <div class="panel-header">Tasks</div>
-        <div id="tasks" hx-get="/api/tasks" hx-trigger="load, sse:task_update">
-            <p>No tasks yet. Create one to get started.</p>
-        </div>
-    </div>
-
-    <div class="panel" style="grid-column: span 2;">
-        <div class="panel-header">Documents</div>
-        <div id="documents" hx-get="/api/documents" hx-trigger="load">
-            <p>Loading documents...</p>
-        </div>
+    <!-- Task Detail (shown when task selected) -->
+    <div class="panel detail-panel" id="task-detail">
+        <div class="panel-header">Task Detail</div>
+        <p class="muted">Select a task to view details</p>
     </div>
 </div>
 {% endblock %}

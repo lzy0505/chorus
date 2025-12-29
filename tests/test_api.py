@@ -18,15 +18,13 @@ class TestHealthEndpoint:
 class TestRootEndpoint:
     """Tests for root endpoint."""
 
-    def test_root_returns_info(self, client: TestClient):
-        """Test root endpoint returns app info."""
+    def test_root_returns_dashboard(self, client: TestClient):
+        """Test root endpoint returns dashboard HTML."""
         response = client.get("/")
 
         assert response.status_code == 200
-        data = response.json()
-        assert "message" in data
-        assert "status" in data
-        assert data["status"] == "running"
+        assert "text/html" in response.headers["content-type"]
+        assert "Chorus" in response.text
 
 
 # Placeholder tests for future API endpoints

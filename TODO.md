@@ -8,24 +8,7 @@
 
 ## Up Next
 
-<!-- Priority tasks - Phase 2: Task API + Hooks -->
-
-### SSE Events
-- [ ] Implement `api/events.py` - SSE endpoint for real-time updates
-
-## Backlog
-
-<!-- Future tasks -->
-
-### Phase 3: Document API
-- [ ] Implement `services/documents.py`
-- [ ] Implement `api/documents.py`
-- [ ] Document reference endpoints
-
-### Phase 4: Dashboard
-- [ ] Task-centric dashboard layout
-- [ ] htmx interactions
-- [ ] SSE integration
+<!-- Future enhancements -->
 
 ### Phase 5: Polish
 - [ ] Error handling
@@ -36,6 +19,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement minimal web dashboard with htmx + SSE (2025-12-29)
 - [x] Implement `api/tasks.py` with full CRUD and lifecycle endpoints (2025-12-29)
 - [x] Implement `POST /api/hooks/posttooluse` for auto-commits (2025-12-29)
 - [x] Implement `services/gitbutler.py` with full test coverage (2025-12-29)
