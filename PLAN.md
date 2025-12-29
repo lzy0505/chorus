@@ -60,12 +60,19 @@
   - [x] `DELETE /api/tasks/{id}` - Delete pending/failed task
   - [x] `GET /api/tasks/{id}/output` - Get terminal output
 
-- [ ] `api/events.py` - SSE endpoint
-  - [ ] Event queue
-  - [ ] `task_status` events
-  - [ ] `claude_status` events
+- [x] `api/events.py` - SSE endpoint ✅
+  - [x] Event queue
+  - [x] `task_status` events
+  - [x] `claude_status` events
 
-### Phase 3: Document API
+### Phase 4: Dashboard 🔄
+- [x] `templates/base.html` - Base layout with htmx/SSE ✅
+- [x] `templates/dashboard.html` - Main task-centric dashboard ✅
+- [x] `templates/partials/` - Task list, detail, item ✅
+- [x] `api/dashboard.py` - HTML partial routes ✅
+- [x] `static/style.css` - Dark theme styling ✅
+
+### Phase 3: Document API (Backlog)
 - [ ] `services/documents.py` - Document manager
   - [ ] File discovery (glob patterns)
   - [ ] Outline parsing

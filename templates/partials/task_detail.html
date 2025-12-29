@@ -1,0 +1,127 @@
+<div class="panel-header">
+    <span>{{ task.title }}</span>
+    <span class="task-status status-{{ task.status.value }}">{{ task.status.value }}</span>
+</div>
+
+<div class="task-info">
+    {% if task.description %}
+    <p class="task-description">{{ task.description }}</p>
+    {% endif %}
+
+    <div class="info-grid">
+        <div class="info-item">
+            <span class="label">Stack:</span>
+            <span class="value">{{ task.stack_name or 'Not assigned' }}</span>
+        </div>
+        <div class="info-item">
+            <span class="label">Claude:</span>
+            <span class="value claude-{{ task.claude_status.value }}">{{ task.claude_status.value }}</span>
+        </div>
+        <div class="info-item">
+            <span class="label">Restarts:</span>
+            <span class="value">{{ task.claude_restarts }}</span>
+        </div>
+        <div class="info-item">
+            <span class="label">Created:</span>
+            <span class="value">{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="task-actions">
+    {% if task.status.value == 'pending' %}
+    <button class="btn btn-primary"
+            hx-post="/api/tasks/{{ task.id }}/start"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Start Task
+    </button>
+    <button class="btn btn-danger"
+            hx-delete="/api/tasks/{{ task.id }}"
+            hx-target="#task-{{ task.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this task?">
+        Delete
+    </button>
+
+    {% elif task.status.value == 'running' %}
+    <button class="btn btn-secondary"
+            hx-post="/api/tasks/{{ task.id }}/restart-claude"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Restart Claude
+    </button>
+    <button class="btn btn-success"
+            hx-post="/api/tasks/{{ task.id }}/complete"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Complete
+    </button>
+    <button class="btn btn-danger"
+            hx-post="/api/tasks/{{ task.id }}/fail"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Fail
+    </button>
+
+    {% elif task.status.value == 'waiting' %}
+    <button class="btn btn-success"
+            hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=true"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Approve
+    </button>
+    <button class="btn btn-danger"
+            hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=false"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Deny
+    </button>
+    {% if task.permission_prompt %}
+    <div class="permission-prompt">{{ task.permission_prompt }}</div>
+    {% endif %}
+
+    {% elif task.status.value == 'completed' or task.status.value == 'failed' %}
+    <button class="btn btn-danger"
+            hx-delete="/api/tasks/{{ task.id }}"
+            hx-target="#task-{{ task.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this task?">
+        Delete
+    </button>
+    {% if task.result %}
+    <div class="task-result">
+        <strong>Result:</strong> {{ task.result }}
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+
+<!-- Terminal Output (for running tasks) -->
+{% if task.status.value in ['running', 'waiting'] %}
+<div class="terminal-section">
+    <div class="terminal-header">
+        <span>Terminal Output</span>
+        <button class="btn btn-small"
+                hx-get="/dashboard/tasks/{{ task.id }}/output"
+                hx-target="#terminal-output"
+                hx-swap="innerHTML">
+            Refresh
+        </button>
+    </div>
+    <pre id="terminal-output" class="terminal" hx-get="/dashboard/tasks/{{ task.id }}/output" hx-trigger="load, every 5s">Loading...</pre>
+</div>
+
+<!-- Send Message -->
+{% if task.claude_status.value == 'idle' %}
+<form class="send-form"
+      hx-post="/dashboard/tasks/{{ task.id }}/send"
+      hx-target="#terminal-output"
+      hx-swap="innerHTML"
+      hx-on::after-request="this.reset()">
+    <input type="text" name="message" placeholder="Send message to Claude..." class="message-input">
+    <button type="submit" class="btn btn-primary">Send</button>
+</form>
+{% endif %}
+{% endif %}

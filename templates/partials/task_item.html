@@ -1,0 +1,18 @@
+<div class="task-item {% if task.status.value == 'running' %}task-running{% elif task.status.value == 'waiting' %}task-waiting{% elif task.status.value == 'completed' %}task-completed{% elif task.status.value == 'failed' %}task-failed{% endif %}"
+     id="task-{{ task.id }}"
+     hx-get="/dashboard/tasks/{{ task.id }}"
+     hx-target="#task-detail"
+     hx-swap="innerHTML">
+    <div class="task-header">
+        <span class="task-title">{{ task.title }}</span>
+        <span class="task-status status-{{ task.status.value }}">{{ task.status.value }}</span>
+    </div>
+    <div class="task-meta">
+        {% if task.stack_name %}
+        <span class="task-stack">{{ task.stack_name }}</span>
+        {% endif %}
+        {% if task.claude_status.value != 'stopped' %}
+        <span class="claude-status claude-{{ task.claude_status.value }}">Claude: {{ task.claude_status.value }}</span>
+        {% endif %}
+    </div>
+</div>
