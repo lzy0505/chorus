@@ -81,19 +81,31 @@ class TestHookPayload:
 class TestGetChorusUrl:
     """Tests for get_chorus_url function."""
 
-    @patch("services.hooks.HOST", "127.0.0.1")
-    @patch("services.hooks.PORT", 8000)
     def test_default_url(self):
         """Test default URL generation."""
+        # Uses config set up by conftest.py
         url = get_chorus_url()
         assert url == "http://127.0.0.1:8000"
 
-    @patch("services.hooks.HOST", "0.0.0.0")
-    @patch("services.hooks.PORT", 9000)
     def test_custom_host_port(self):
         """Test URL with custom host and port."""
-        url = get_chorus_url()
-        assert url == "http://0.0.0.0:9000"
+        from config import Config, ServerConfig, set_config, get_config
+
+        # Save original
+        original = get_config()
+
+        # Set custom config
+        custom = Config(
+            server=ServerConfig(host="0.0.0.0", port=9000),
+        )
+        set_config(custom)
+
+        try:
+            url = get_chorus_url()
+            assert url == "http://0.0.0.0:9000"
+        finally:
+            # Restore original
+            set_config(original)
 
 
 class TestGenerateHooksConfig:
@@ -322,9 +334,11 @@ class TestHooksService:
 
     def test_init_default_project_root(self):
         """Test initialization with default project root."""
-        with patch("config.PROJECT_ROOT", Path("/default/root")):
-            service = HooksService()
-            assert service.project_root == Path("/default/root")
+        from config import get_config
+
+        service = HooksService()
+        # Should use project_root from the test config
+        assert service.project_root == get_config().project_root
 
     def test_init_custom_project_root(self):
         """Test initialization with custom project root."""

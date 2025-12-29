@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Optional
 
-from config import PROJECT_ROOT
+from config import get_config
 
 
 class GitButlerError(Exception):
@@ -86,18 +86,21 @@ def _run_but(
     Args:
         args: Command arguments (without 'but').
         check: Whether to raise on non-zero exit.
-        cwd: Working directory (defaults to PROJECT_ROOT).
+        cwd: Working directory (defaults to config project_root).
 
     Returns:
         CompletedProcess with stdout/stderr.
     """
     cmd = ["but"] + args
+    if cwd is None:
+        config = get_config()
+        cwd = str(config.project_root)
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=check,
-        cwd=cwd or str(PROJECT_ROOT),
+        cwd=cwd,
     )
 
 
@@ -163,9 +166,12 @@ class GitButlerService:
         """Initialize the GitButler service.
 
         Args:
-            project_root: Working directory. Defaults to PROJECT_ROOT.
+            project_root: Working directory. Defaults to config project_root.
         """
-        self.project_root = project_root or str(PROJECT_ROOT)
+        if project_root is None:
+            config = get_config()
+            project_root = str(config.project_root)
+        self.project_root = project_root
 
     def get_status(self) -> WorkspaceStatus:
         """Get the current workspace status.

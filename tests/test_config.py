@@ -1,36 +1,64 @@
 """Tests for configuration module."""
 
-import os
+import re
 from pathlib import Path
+
+import pytest
+
+from config import (
+    Config,
+    ServerConfig,
+    DatabaseConfig,
+    TmuxConfig,
+    StatusPatterns,
+    load_config,
+    default_config,
+    set_config,
+    get_config,
+)
+
+
+@pytest.fixture
+def reset_config():
+    """Reset global config after test."""
+    import config
+    original = config._config
+    yield
+    config._config = original
 
 
 class TestConfigDefaults:
     """Tests for default configuration values."""
 
+    def test_default_config_creation(self):
+        """Test default config can be created."""
+        cfg = default_config()
+        assert isinstance(cfg, Config)
+
     def test_session_prefix_default(self):
         """Test default session prefix."""
-        from config import SESSION_PREFIX
-        assert SESSION_PREFIX == "claude"
+        cfg = default_config()
+        assert cfg.tmux.session_prefix == "claude"
 
     def test_poll_interval_default(self):
         """Test default poll interval."""
-        from config import POLL_INTERVAL
-        assert POLL_INTERVAL == 1.0
+        cfg = default_config()
+        assert cfg.tmux.poll_interval == 1.0
 
     def test_host_default(self):
         """Test default host."""
-        from config import HOST
-        assert HOST == "127.0.0.1"
+        cfg = default_config()
+        assert cfg.server.host == "127.0.0.1"
 
     def test_port_default(self):
         """Test default port."""
-        from config import PORT
-        assert PORT == 8000
+        cfg = default_config()
+        assert cfg.server.port == 8000
 
     def test_editor_default(self):
         """Test default editor."""
-        from config import EDITOR
-        assert EDITOR == "vim"
+        cfg = default_config()
+        assert cfg.editor == "vim"
 
 
 class TestDocumentPatterns:
@@ -38,19 +66,19 @@ class TestDocumentPatterns:
 
     def test_document_patterns_exist(self):
         """Test document patterns are defined."""
-        from config import DOCUMENT_PATTERNS
-        assert isinstance(DOCUMENT_PATTERNS, list)
-        assert len(DOCUMENT_PATTERNS) > 0
+        cfg = default_config()
+        assert isinstance(cfg.document_patterns, list)
+        assert len(cfg.document_patterns) > 0
 
     def test_markdown_pattern_included(self):
         """Test markdown patterns are included."""
-        from config import DOCUMENT_PATTERNS
-        assert "*.md" in DOCUMENT_PATTERNS
+        cfg = default_config()
+        assert "*.md" in cfg.document_patterns
 
     def test_docs_pattern_included(self):
         """Test docs directory pattern is included."""
-        from config import DOCUMENT_PATTERNS
-        assert "docs/**/*.md" in DOCUMENT_PATTERNS
+        cfg = default_config()
+        assert "docs/**/*.md" in cfg.document_patterns
 
 
 class TestStatusPatterns:
@@ -58,34 +86,28 @@ class TestStatusPatterns:
 
     def test_status_patterns_exist(self):
         """Test status patterns are defined."""
-        from config import STATUS_PATTERNS
-        assert isinstance(STATUS_PATTERNS, dict)
-        assert "idle" in STATUS_PATTERNS
-        assert "waiting" in STATUS_PATTERNS
+        cfg = default_config()
+        assert isinstance(cfg.status_patterns, StatusPatterns)
+        assert len(cfg.status_patterns.idle) > 0
+        assert len(cfg.status_patterns.waiting) > 0
 
     def test_idle_patterns(self):
         """Test idle patterns are valid regex."""
-        import re
-        from config import STATUS_PATTERNS
-
-        for pattern in STATUS_PATTERNS["idle"]:
+        cfg = default_config()
+        for pattern in cfg.status_patterns.idle:
             # Should compile without error
             re.compile(pattern)
 
     def test_waiting_patterns(self):
         """Test waiting patterns are valid regex."""
-        import re
-        from config import STATUS_PATTERNS
-
-        for pattern in STATUS_PATTERNS["waiting"]:
+        cfg = default_config()
+        for pattern in cfg.status_patterns.waiting:
             # Should compile without error
             re.compile(pattern)
 
     def test_idle_pattern_matches_prompt(self):
         """Test idle patterns match expected prompts."""
-        import re
-        from config import STATUS_PATTERNS
-
+        cfg = default_config()
         test_cases = [
             ">",
             "> ",
@@ -96,15 +118,13 @@ class TestStatusPatterns:
         for text in test_cases:
             matched = any(
                 re.search(pattern, text)
-                for pattern in STATUS_PATTERNS["idle"]
+                for pattern in cfg.status_patterns.idle
             )
             assert matched, f"Idle pattern should match: {text!r}"
 
     def test_waiting_pattern_matches_prompts(self):
         """Test waiting patterns match expected prompts."""
-        import re
-        from config import STATUS_PATTERNS
-
+        cfg = default_config()
         test_cases = [
             "Allow write? (y/n)",
             "Do you want to proceed?",
@@ -116,7 +136,7 @@ class TestStatusPatterns:
         for text in test_cases:
             matched = any(
                 re.search(pattern, text)
-                for pattern in STATUS_PATTERNS["waiting"]
+                for pattern in cfg.status_patterns.waiting
             )
             assert matched, f"Waiting pattern should match: {text!r}"
 
@@ -125,21 +145,90 @@ class TestProjectRoot:
     """Tests for PROJECT_ROOT configuration."""
 
     def test_project_root_is_path(self):
-        """Test PROJECT_ROOT is a Path object."""
-        from config import PROJECT_ROOT
-        assert isinstance(PROJECT_ROOT, Path)
+        """Test project_root is a Path object."""
+        cfg = default_config()
+        assert isinstance(cfg.project_root, Path)
 
     def test_project_root_from_env(self, monkeypatch, tmp_path):
-        """Test PROJECT_ROOT can be set via environment."""
+        """Test project_root can be set via environment."""
         monkeypatch.setenv("PROJECT_ROOT", str(tmp_path))
+        cfg = default_config()
+        assert cfg.project_root == tmp_path
 
-        # Need to reimport to get new value
-        import importlib
+
+class TestTomlLoading:
+    """Tests for TOML configuration loading."""
+
+    def test_load_config_from_file(self, tmp_path):
+        """Test loading config from TOML file."""
+        config_file = tmp_path / "test.toml"
+        config_file.write_text("""
+[server]
+host = "0.0.0.0"
+port = 9000
+
+[database]
+url = "sqlite:///test.db"
+
+[tmux]
+session_prefix = "test"
+poll_interval = 2.0
+
+[editor]
+command = "nano"
+""")
+        cfg = load_config(config_file)
+        assert cfg.server.host == "0.0.0.0"
+        assert cfg.server.port == 9000
+        assert cfg.database.url == "sqlite:///test.db"
+        assert cfg.tmux.session_prefix == "test"
+        assert cfg.tmux.poll_interval == 2.0
+        assert cfg.editor == "nano"
+
+    def test_load_config_with_defaults(self, tmp_path):
+        """Test loading partial config uses defaults."""
+        config_file = tmp_path / "partial.toml"
+        config_file.write_text("""
+[server]
+port = 8080
+""")
+        cfg = load_config(config_file)
+        assert cfg.server.port == 8080
+        assert cfg.server.host == "127.0.0.1"  # default
+        assert cfg.tmux.session_prefix == "claude"  # default
+
+    def test_load_config_file_not_found(self, tmp_path):
+        """Test loading non-existent config raises error."""
+        with pytest.raises(FileNotFoundError):
+            load_config(tmp_path / "nonexistent.toml")
+
+
+class TestGlobalConfig:
+    """Tests for global config management."""
+
+    def test_get_config_without_set_raises(self, reset_config):
+        """Test getting config before setting raises error."""
         import config
-        importlib.reload(config)
+        config._config = None
+        with pytest.raises(RuntimeError, match="not initialized"):
+            get_config()
 
-        assert config.PROJECT_ROOT == tmp_path
+    def test_set_and_get_config(self, reset_config):
+        """Test setting and getting global config."""
+        cfg = default_config()
+        set_config(cfg)
+        assert get_config() is cfg
 
-        # Reset for other tests
-        monkeypatch.delenv("PROJECT_ROOT", raising=False)
-        importlib.reload(config)
+    def test_legacy_attribute_access(self, reset_config):
+        """Test legacy module-level attribute access."""
+        import config
+        cfg = default_config()
+        set_config(cfg)
+
+        assert config.HOST == "127.0.0.1"
+        assert config.PORT == 8000
+        assert config.SESSION_PREFIX == "claude"
+        assert config.POLL_INTERVAL == 1.0
+        assert config.EDITOR == "vim"
+        assert isinstance(config.DOCUMENT_PATTERNS, list)
+        assert isinstance(config.STATUS_PATTERNS, dict)

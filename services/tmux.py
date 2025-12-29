@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from config import SESSION_PREFIX, PROJECT_ROOT
+from config import get_config
 
 
 class TmuxError(Exception):
@@ -42,7 +42,8 @@ class SessionInfo:
 
 def _session_id_for_task(task_id: int) -> str:
     """Generate tmux session ID for a task."""
-    return f"{SESSION_PREFIX}-task-{task_id}"
+    config = get_config()
+    return f"{config.tmux.session_prefix}-task-{task_id}"
 
 
 def _run_tmux(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -73,9 +74,12 @@ class TmuxService:
         """Initialize the tmux service.
 
         Args:
-            project_root: Working directory for sessions. Defaults to PROJECT_ROOT.
+            project_root: Working directory for sessions. Defaults to config project_root.
         """
-        self.project_root = project_root or str(PROJECT_ROOT)
+        if project_root is None:
+            config = get_config()
+            project_root = str(config.project_root)
+        self.project_root = project_root
 
     def get_session_id(self, task_id: int) -> str:
         """Get the tmux session ID for a task."""
@@ -282,7 +286,8 @@ class TmuxService:
             return []
 
         task_ids = []
-        prefix = f"{SESSION_PREFIX}-task-"
+        config = get_config()
+        prefix = f"{config.tmux.session_prefix}-task-"
         for line in result.stdout.strip().split("\n"):
             if line.startswith(prefix):
                 try:
