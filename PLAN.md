@@ -23,32 +23,36 @@
   - [x] `capture_output(task_id)` - Get terminal output
   - [x] `send_keys(task_id, text)` - Send input to Claude
 
-- [ ] `services/hooks.py` - Claude Code hooks integration
-  - [ ] `generate_hooks_config(task_id)` - Generate .claude/settings.json for task
-  - [ ] `hook_handler.py` script - Reads stdin JSON, POSTs to Chorus API
-  - [ ] Session-to-task mapping via `claude_session_id`
+- [x] `services/hooks.py` - Claude Code hooks integration ✅
+  - [x] `generate_hooks_config(task_id)` - Generate .claude/settings.json for task
+  - [x] `HookPayload` dataclass for parsing hook events
+  - [x] `HooksService` class for setup/teardown
+  - [x] Session-to-task mapping via `claude_session_id`
 
-- [ ] `api/hooks.py` - Hook event endpoints
-  - [ ] `POST /api/hooks/start` - SessionStart event → map session to task
-  - [ ] `POST /api/hooks/stop` - Stop event → claude_status = idle
-  - [ ] `POST /api/hooks/permission` - PermissionRequest → status = waiting
-  - [ ] `POST /api/hooks/end` - SessionEnd → claude_status = stopped
+- [x] `api/hooks.py` - Hook event endpoints ✅
+  - [x] `POST /api/hooks/sessionstart` - SessionStart event → map session to task
+  - [x] `POST /api/hooks/stop` - Stop event → claude_status = idle
+  - [x] `POST /api/hooks/permissionrequest` - PermissionRequest → status = waiting
+  - [x] `POST /api/hooks/sessionend` - SessionEnd → claude_status = stopped
+  - [x] `POST /api/hooks/notification` - Notification → confirms idle
 
-- [ ] `services/gitbutler.py` - GitButler MCP integration
-  - [ ] `create_branch(name)` - Create feature branch
-  - [ ] `commit_changes(message)` - Commit via update_branches
+- [ ] `services/gitbutler.py` - GitButler CLI integration
+  - [ ] `create_stack(name)` - Create stack via `but branch new`
+  - [ ] `get_status()` - Get workspace status via `but status -j`
+  - [ ] `delete_stack(stack)` - Delete stack via `but branch delete`
+  - [ ] `get_stack_commits(stack)` - Get commits via `but branch show -j`
 
 - [ ] `api/tasks.py` - Task lifecycle endpoints
   - [ ] `POST /api/tasks` - Create task
   - [ ] `GET /api/tasks` - List tasks
   - [ ] `GET /api/tasks/{id}` - Get task details
   - [ ] `PUT /api/tasks/{id}` - Update task
-  - [ ] `POST /api/tasks/{id}/start` - Start task (branch + tmux + Claude)
+  - [ ] `POST /api/tasks/{id}/start` - Start task (stack + tmux + Claude)
   - [ ] `POST /api/tasks/{id}/restart-claude` - Restart Claude session
   - [ ] `POST /api/tasks/{id}/send` - Send message to Claude
   - [ ] `POST /api/tasks/{id}/respond` - Respond to permission prompt
-  - [ ] `POST /api/tasks/{id}/complete` - Complete task (commit + cleanup)
-  - [ ] `POST /api/tasks/{id}/fail` - Mark task as failed
+  - [ ] `POST /api/tasks/{id}/complete` - Complete task (finalize, GitButler auto-commits)
+  - [ ] `POST /api/tasks/{id}/fail` - Mark task as failed, optionally delete stack
   - [ ] `DELETE /api/tasks/{id}` - Delete pending/failed task
 
 - [ ] `api/events.py` - SSE endpoint
