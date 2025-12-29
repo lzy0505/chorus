@@ -14,7 +14,7 @@
     <div class="panel task-panel">
         <div class="panel-header">
             <span>Tasks</span>
-            <div class="filter-tabs">
+            <div class="filter-tabs" onclick="if(event.target.classList.contains('tab')){this.querySelector('.active')?.classList.remove('active');event.target.classList.add('active')}">
                 <button class="tab active" hx-get="/dashboard/tasks" hx-target="#task-list">All</button>
                 <button class="tab" hx-get="/dashboard/tasks?status=running" hx-target="#task-list">Running</button>
                 <button class="tab" hx-get="/dashboard/tasks?status=pending" hx-target="#task-list">Pending</button>
