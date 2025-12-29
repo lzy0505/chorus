@@ -100,6 +100,12 @@ def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dic
                     "command": handler_script,
                 }
             ],
+            "PostToolUse": [
+                {
+                    "type": "command",
+                    "command": handler_script,
+                }
+            ],
         }
     }
 
@@ -133,6 +139,7 @@ def generate_hooks_config_with_handler(
             "Stop": [{"type": "command", "command": command}],
             "PermissionRequest": [{"type": "command", "command": command}],
             "SessionEnd": [{"type": "command", "command": command}],
+            "PostToolUse": [{"type": "command", "command": command}],
         }
     }
 

@@ -111,6 +111,7 @@ class TestGenerateHooksConfig:
         assert "Stop" in hooks
         assert "PermissionRequest" in hooks
         assert "SessionEnd" in hooks
+        assert "PostToolUse" in hooks
 
     def test_hook_structure(self):
         """Test the structure of each hook entry."""

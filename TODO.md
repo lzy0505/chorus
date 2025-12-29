@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-29 16:06
+> Auto-updated by Claude Code. Last update: 2025-12-29 16:20
 
 ## In Progress
 
@@ -9,9 +9,6 @@
 ## Up Next
 
 <!-- Priority tasks - Phase 2: Task API + Hooks -->
-
-### ToolUse Hook
-- [ ] Add `POST /api/hooks/tooluse` endpoint for auto-commits after file edits
 
 ### Task API
 - [ ] Implement `api/tasks.py` - Full task lifecycle
@@ -47,6 +44,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement `POST /api/hooks/posttooluse` for auto-commits (2025-12-29)
 - [x] Implement `services/gitbutler.py` with full test coverage (2025-12-29)
 - [x] Implement `api/hooks.py` with full test coverage (2025-12-29)
 - [x] Implement `services/hooks.py` with full test coverage (2025-12-29)

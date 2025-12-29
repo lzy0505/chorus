@@ -43,8 +43,8 @@
   - [x] `delete_stack(stack)` - Delete stack via `but branch delete --force`
   - [x] `get_stack_commits(stack)` - Get commits via `but branch show -j`
 
-- [ ] `api/hooks.py` - Add tooluse endpoint
-  - [ ] `POST /api/hooks/tooluse` - After file edit, commit to task's stack
+- [x] `api/hooks.py` - Add tooluse endpoint ✅
+  - [x] `POST /api/hooks/posttooluse` - After file edit, commit to task's stack
 
 - [ ] `api/tasks.py` - Task lifecycle endpoints
   - [ ] `POST /api/tasks` - Create task
