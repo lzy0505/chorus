@@ -10,14 +10,6 @@
 
 <!-- Priority tasks - Phase 2: Task API + Hooks -->
 
-### Task API
-- [ ] Implement `api/tasks.py` - Full task lifecycle
-  - [ ] CRUD endpoints (create, list, get, update, delete)
-  - [ ] `POST /api/tasks/{id}/start` - Start task
-  - [ ] `POST /api/tasks/{id}/restart-claude` - Restart Claude
-  - [ ] `POST /api/tasks/{id}/complete` - Complete task
-  - [ ] `POST /api/tasks/{id}/fail` - Fail task
-
 ### SSE Events
 - [ ] Implement `api/events.py` - SSE endpoint for real-time updates
 
@@ -44,6 +36,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement `api/tasks.py` with full CRUD and lifecycle endpoints (2025-12-29)
 - [x] Implement `POST /api/hooks/posttooluse` for auto-commits (2025-12-29)
 - [x] Implement `services/gitbutler.py` with full test coverage (2025-12-29)
 - [x] Implement `api/hooks.py` with full test coverage (2025-12-29)
