@@ -15,13 +15,13 @@
 
 **Priority: tmux and task lifecycle management**
 
-- [ ] Update `services/tmux.py` - Task-centric tmux operations
-  - [ ] `create_task_session(task_id)` - Create tmux for a task
-  - [ ] `start_claude(task_id)` - Launch Claude in task's tmux
-  - [ ] `restart_claude(task_id)` - Kill and relaunch Claude
-  - [ ] `kill_task_session(task_id)` - Kill task's tmux
-  - [ ] `capture_output(task_id)` - Get terminal output
-  - [ ] `send_keys(task_id, text)` - Send input to Claude
+- [x] Update `services/tmux.py` - Task-centric tmux operations ✅
+  - [x] `create_task_session(task_id)` - Create tmux for a task
+  - [x] `start_claude(task_id)` - Launch Claude in task's tmux
+  - [x] `restart_claude(task_id)` - Kill and relaunch Claude
+  - [x] `kill_task_session(task_id)` - Kill task's tmux
+  - [x] `capture_output(task_id)` - Get terminal output
+  - [x] `send_keys(task_id, text)` - Send input to Claude
 
 - [ ] `services/detector.py` - Claude status detection
   - [ ] `detect_claude_status(output)` → (ClaudeStatus, permission_prompt)

@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-29 01:32
+> Auto-updated by Claude Code. Last update: 2025-12-29 14:10
 
 ## In Progress
 
@@ -8,19 +8,7 @@
 
 ## Up Next
 
-<!-- Priority tasks - Phase 2: Task API + Monitor (tmux focus) -->
-
-### tmux Service (task-centric)
-- [ ] Update `services/tmux.py` with task-centric operations
-  - [ ] `create_task_session(task_id)` - Create tmux for a task
-  - [ ] `start_claude(task_id)` - Launch Claude in task's tmux
-  - [ ] `restart_claude(task_id)` - Kill and relaunch Claude
-  - [ ] `kill_task_session(task_id)` - Kill task's tmux
-
-### Claude Status Detection
-- [ ] Implement `services/detector.py`
-  - [ ] `detect_claude_status(output)` → (ClaudeStatus, permission_prompt)
-  - [ ] Idle/busy/waiting pattern matching
+<!-- Priority tasks - Phase 2: Task API + Hooks -->
 
 ### GitButler Integration
 - [ ] Implement `services/gitbutler.py`
@@ -62,6 +50,11 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement `api/hooks.py` with full test coverage (2025-12-29)
+- [x] Implement `services/hooks.py` with full test coverage (2025-12-29)
+- [x] Add `claude_session_id` field to Task model (2025-12-29)
+- [x] Switch to Claude Code hooks for status detection (2025-12-29)
+- [x] Implement task-centric TmuxService with tests (2025-12-29)
 - [x] Migrate to task-centric architecture (2025-12-29)
 - [x] Update all documentation (design.md, CLAUDE.md, PLAN.md)
 - [x] Update models.py (remove Session, enhance Task)
