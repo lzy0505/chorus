@@ -38,9 +38,9 @@
         Start Task
     </button>
     <button class="btn btn-danger"
-            hx-delete="/api/tasks/{{ task.id }}"
+            hx-delete="/dashboard/tasks/{{ task.id }}"
             hx-target="#task-{{ task.id }}"
-            hx-swap="outerHTML"
+            hx-swap="delete"
             hx-confirm="Delete this task?">
         Delete
     </button>
@@ -84,9 +84,9 @@
 
     {% elif task.status.value == 'completed' or task.status.value == 'failed' %}
     <button class="btn btn-danger"
-            hx-delete="/api/tasks/{{ task.id }}"
+            hx-delete="/dashboard/tasks/{{ task.id }}"
             hx-target="#task-{{ task.id }}"
-            hx-swap="outerHTML"
+            hx-swap="delete"
             hx-confirm="Delete this task?">
         Delete
     </button>

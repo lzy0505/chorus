@@ -74,6 +74,25 @@ async def create_task(
     )
 
 
+@router.delete("/tasks/{task_id}", response_class=HTMLResponse)
+async def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a task and return HTML to clear task item and detail panel."""
+    from api.tasks import delete_task as api_delete_task
+
+    try:
+        await api_delete_task(task_id, db)
+    except HTTPException:
+        raise
+
+    # Return empty content for the task item (removes it) plus OOB to clear detail
+    empty_detail = '''<div class="panel-header" hx-swap-oob="innerHTML:#task-detail">Task Detail</div>
+<p class="muted" hx-swap-oob="true" id="task-detail-placeholder">Select a task to view details</p>'''
+    return HTMLResponse(empty_detail)
+
+
 @router.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def get_task_detail(
     request: Request,
