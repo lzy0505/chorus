@@ -36,6 +36,28 @@ async def get_task_list(
     )
 
 
+@router.post("/tasks", response_class=HTMLResponse)
+async def create_task(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create a task from form data and return task item HTML."""
+    form = await request.form()
+    title = form.get("title", "").strip()
+
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
+    task = Task(title=title)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return templates.TemplateResponse(
+        request, "partials/task_item.html", {"task": task}
+    )
+
+
 @router.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def get_task_detail(
     request: Request,
