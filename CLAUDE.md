@@ -10,7 +10,15 @@ Task-centric orchestration for multiple Claude Code sessions. See `design.md` fo
 **Allowed (read-only):**
 - `git status`, `git diff`, `git log`, `git add`
 
-GitButler hooks handle all commits automatically. Direct git commands bypass the system and cause conflicts.
+GitButler hooks (`but claude pre-tool/post-tool/stop`) handle all commits automatically. Direct git commands bypass the system and cause conflicts.
+
+**GitButler CLI (`but`):**
+- `but status` — View workspace with all stacks
+- `but branch new <name>` — Create a new stack
+- `but branch delete <stack>` — Delete a stack
+- `but commit -m "msg" <stack>` — Manual commit (rarely needed)
+
+**Terminology:** GitButler uses "stacks" (virtual branches) that run in parallel. Multiple tasks can have concurrent stacks in the same workspace.
 
 ---
 

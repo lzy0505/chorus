@@ -7,13 +7,13 @@ A lightweight orchestration system for managing multiple Claude Code tasks worki
 ### Core Concept
 
 ```
-Task = tmux process + GitButler branch + ephemeral Claude sessions
+Task = tmux process + GitButler stack + ephemeral Claude sessions
 ```
 
 - **Task** is the primary entity — represents a unit of work
 - **tmux process** persists for the task's lifetime — provides isolation
 - **Claude sessions** are ephemeral — can be restarted within the same tmux when they hang, lose focus, or need fresh context
-- **GitButler branch** tracks all changes — commits automatically on task completion
+- **GitButler stack** (virtual branch) tracks all changes — GitButler auto-commits via its native hooks
 
 ### Goals
 
@@ -42,7 +42,7 @@ Task = tmux process + GitButler branch + ephemeral Claude sessions
 │  │     Tasks       │  │   Documents     │  │     Alerts / Actions          ││
 │  │                 │  │                 │  │                               ││
 │  │ • Status        │  │ • Tree view     │  │ • Permission prompts          ││
-│  │ • Branch info   │  │ • References    │  │ • Restart Claude button       ││
+│  │ • Stack info    │  │ • References    │  │ • Restart Claude button       ││
 │  │ • Restart Claude│  │ • Line select   │  │ • Complete task button        ││
 │  │ • Complete task │  │                 │  │                               ││
 │  └─────────────────┘  └─────────────────┘  └───────────────────────────────┘│
@@ -54,7 +54,7 @@ Task = tmux process + GitButler branch + ephemeral Claude sessions
 │                            FastAPI Backend                                   │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
-│  │    Task API     │  │  Document API   │  │      GitButler API          │ │
+│  │    Task API     │  │  Document API   │  │    GitButler Service        │ │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘ │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
@@ -77,8 +77,8 @@ Task = tmux process + GitButler branch + ephemeral Claude sessions
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                          tmux Processes (one per task)                    │
 │                                                                          │
-│  [task-auth]              [task-api]              [task-tests]           │
-│  branch: feat/auth        branch: feat/api        branch: feat/tests     │
+│  [task-1]                 [task-2]                [task-3]               │
+│  stack: task-1-auth       stack: task-2-api       stack: task-3-tests    │
 │  claude: running          claude: waiting         claude: stopped        │
 │  restarts: 0              restarts: 2             restarts: 1            │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -92,7 +92,7 @@ Task = tmux process + GitButler branch + ephemeral Claude sessions
 | **FastAPI Backend** | REST API + SSE; coordinates all components |
 | **Task Monitor** | Background polling of tmux processes, detecting Claude status |
 | **Document Manager** | Markdown file operations, outline parsing |
-| **GitButler API** | Create branches, commit changes via GitButler MCP |
+| **GitButler Service** | Create/manage stacks via `but` CLI, monitor stack status |
 | **Desktop Notifier** | OS-native notifications for permission requests |
 | **tmux** | Process isolation per task |
 
@@ -111,7 +111,7 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 | `description` | string | Detailed task description (markdown supported) |
 | `priority` | int | Higher = more important, default 0 |
 | `status` | enum | `pending`, `running`, `waiting`, `completed`, `failed` |
-| `branch_name` | string? | GitButler branch name, nullable until started |
+| `stack_id` | string? | GitButler stack CLI ID, nullable until started |
 | `tmux_session` | string? | tmux session ID, nullable until started |
 | `claude_session_id` | string? | Claude Code session ID (from hooks), nullable |
 | `claude_status` | enum | `stopped`, `starting`, `idle`, `busy`, `waiting` |
@@ -121,11 +121,11 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 | `created_at` | datetime | Task creation time |
 | `started_at` | datetime? | When tmux was spawned |
 | `completed_at` | datetime? | When task was completed |
-| `commit_message` | string? | Generated commit message on completion |
+| `stack_name` | string? | GitButler stack name for reference |
 | `result` | string? | Completion notes or failure reason |
 
 **Status Definitions:**
-- `pending`: Task created, not yet started (no tmux, no branch)
+- `pending`: Task created, not yet started (no tmux, no stack)
 - `running`: tmux process active, Claude is working
 - `waiting`: Claude is asking for permission (y/n prompt detected)
 - `completed`: Task finished, changes committed via GitButler
@@ -176,7 +176,8 @@ A reference to specific lines in a document, linked to a task.
 │ description         │
 │ priority            │
 │ status              │
-│ branch_name         │◀─── GitButler feature branch
+│ stack_id            │◀─── GitButler stack CLI ID
+│ stack_name          │◀─── GitButler stack name
 │ tmux_session        │◀─── tmux session ID
 │ claude_status       │
 │ claude_restarts     │
@@ -185,7 +186,6 @@ A reference to specific lines in a document, linked to a task.
 │ created_at          │
 │ started_at          │
 │ completed_at        │
-│ commit_message      │
 │ result              │
 └─────────────────────┘
           │
@@ -233,7 +233,7 @@ A reference to specific lines in a document, linked to a task.
    - Optionally adds document references for context
 
 2. **Start Task** (`pending` → `running`)
-   - Create GitButler feature branch: `gitbutler mcp create_branch --name {branch}`
+   - Create GitButler stack: `but branch new {stack-name}`
    - Spawn tmux session: `tmux new-session -d -s task-{id} -c {project_root}`
    - Start Claude in tmux: `tmux send-keys "claude" Enter`
    - Send initial prompt with task description + document context
@@ -252,15 +252,14 @@ A reference to specific lines in a document, linked to a task.
 
 5. **Complete Task** (`running` → `completed`)
    - User triggers completion from dashboard
-   - Send prompt to Claude: "Generate a very short commit message for the changes made"
-   - Capture commit message from Claude's response
-   - Call GitButler: `gitbutler mcp update_branches` with commit message
+   - GitButler auto-commits via its native hooks (`but claude post-tool/stop`)
+   - Alternatively, manual commit: `but commit -m "message" {stack}`
    - Kill tmux session
    - Update task status to `completed`
 
 6. **Fail Task** (`running` → `failed`)
    - User marks task as failed
-   - Optionally discard GitButler branch
+   - Optionally discard GitButler stack: `but branch delete {stack}`
    - Kill tmux session
    - Record failure reason
 
@@ -298,15 +297,15 @@ Get task details including document references.
 Update task fields (title, description, priority).
 
 #### `POST /api/tasks/{task_id}/start`
-Start the task — creates branch, spawns tmux, launches Claude.
+Start the task — creates stack, spawns tmux, launches Claude.
 
 **Implementation:**
-1. Create GitButler branch: `feat/{task_title_slug}`
+1. Create GitButler stack: `but branch new task-{id}-{slug}`
 2. Spawn tmux: `tmux new-session -d -s task-{id} -c {project_root}`
 3. Start Claude: `tmux send-keys "claude" Enter`
 4. Build prompt with task description + document references
 5. Send prompt: `tmux send-keys "{prompt}" Enter`
-6. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`
+6. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_id = {cli_id}`
 
 #### `POST /api/tasks/{task_id}/restart-claude`
 Restart Claude session within the task's tmux.
@@ -346,24 +345,24 @@ Respond to a permission prompt.
 ```
 
 #### `POST /api/tasks/{task_id}/complete`
-Complete the task — generates commit message, commits via GitButler, kills tmux.
+Complete the task — ensures changes are committed, kills tmux.
 
 **Implementation:**
-1. Send to Claude: "Generate a very short (1 line) commit message summarizing the changes made in this task."
-2. Capture Claude's response (poll for idle status, extract message)
-3. Call GitButler MCP: `update_branches` with commit message
-4. Kill tmux session
-5. Update task: `status = completed`, `completed_at = now()`, `commit_message = {msg}`
+1. GitButler auto-commits via native hooks (already handled by `but claude stop`)
+2. Optionally verify stack has commits: `but branch show {stack} -j`
+3. Kill tmux session
+4. Update task: `status = completed`, `completed_at = now()`
 
 **Response:**
 ```json
 {
   "id": 1,
   "status": "completed",
-  "commit_message": "Add JWT authentication with login/logout endpoints",
   "completed_at": "2025-01-15T15:30:00Z"
 }
 ```
+
+**Note:** Commit messages are generated by GitButler based on the Claude session context.
 
 #### `POST /api/tasks/{task_id}/fail`
 Mark task as failed.
@@ -497,19 +496,50 @@ async def hook_session_end(payload: HookPayload):
 
 ### GitButler Integration
 
-**Branch Creation:**
+GitButler uses **virtual branches** called **stacks** that can run in parallel. Multiple tasks can have their own stacks simultaneously in the same workspace.
+
+**CLI (`but`):**
 ```bash
-# Create feature branch for task
-gitbutler mcp create_branch --name "feat/{task-slug}"
+# Create a new stack for a task
+but branch new task-{id}-{slug}
+
+# List all stacks and their status
+but status -j
+
+# Show commits in a stack
+but branch show {stack} -j
+
+# Manual commit to a specific stack (rarely needed - GitButler auto-commits)
+but commit -m "message" {stack}
+
+# Delete a stack (when task fails/cancelled)
+but branch delete {stack}
 ```
 
-**Commit on Completion:**
-```bash
-# Sync all changes to branch with commit message
-gitbutler mcp update_branches
+**Auto-Commit via Claude Code Hooks:**
+GitButler provides native hooks that automatically commit changes:
+- `but claude pre-tool` — Called before file edits, prepares tracking
+- `but claude post-tool` — Called after file edits, commits changes
+- `but claude stop` — Called when Claude stops, finalizes commits
+
+These hooks are already configured in `.claude/settings.local.json` and handle commit message generation automatically.
+
+**Chorus + GitButler Architecture:**
+```
+Claude Code (in tmux)
+    ↓ Edit/Write tool
+GitButler hooks (pre-tool → post-tool)
+    ↓ Auto-commit to stack
+Chorus hooks (SessionStart/Stop/etc)
+    ↓ Update task status
+Dashboard (real-time via SSE)
 ```
 
-Note: The exact GitButler MCP commands may vary based on the GitButler CLI/API.
+Chorus provides a **second layer of control** via its own hooks for:
+- Task-to-session mapping
+- Permission request handling
+- Real-time status updates to dashboard
+- Task lifecycle management (start/complete/fail)
 
 ### tmux Commands
 
@@ -602,18 +632,18 @@ Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming h
 │                                                                         │
 │  ┌─ Tasks ─────────────────────────────────────────────────────────────┐│
 │  │                                                                     ││
-│  │  ● Implement auth        [RUNNING]  branch: feat/auth    P:10      ││
+│  │  ● Implement auth        [RUNNING]  stack: task-1-auth   P:10      ││
 │  │    Claude: BUSY          restarts: 0                               ││
 │  │    [Restart Claude] [Send Message] [Complete] [Fail]               ││
 │  │                                                                     ││
-│  │  ⚠ Add rate limiting     [WAITING]  branch: feat/rate   P:5       ││
+│  │  ⚠ Add rate limiting     [WAITING]  stack: task-2-rate   P:5      ││
 │  │    Claude: WAITING       "Allow write to api.py?"                  ││
 │  │    [Approve] [Deny] [Restart Claude]                               ││
 │  │                                                                     ││
 │  │  ○ Setup tests           [PENDING]                       P:0       ││
 │  │    [Start Task]                                                    ││
 │  │                                                                     ││
-│  │  ✓ Initial setup         [COMPLETED]  commit: "Initial setup"     ││
+│  │  ✓ Initial setup         [COMPLETED]  stack: task-0-setup         ││
 │  │                                                                     ││
 │  └─────────────────────────────────────────────────────────────────────┘│
 │                                                                         │
@@ -636,16 +666,16 @@ Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming h
 
 1. **Task List:**
    - Auto-refreshes via SSE on status changes
-   - Shows task status, Claude status, branch name, restart count
+   - Shows task status, Claude status, stack name, restart count
    - Action buttons contextual to status
    - Waiting tasks show permission prompt inline
 
 2. **Task Actions:**
-   - **Start Task**: Creates branch, spawns tmux, launches Claude
+   - **Start Task**: Creates stack, spawns tmux, launches Claude
    - **Restart Claude**: Kills and restarts Claude in tmux
    - **Send Message**: Opens modal to send additional instructions
-   - **Complete**: Triggers commit flow
-   - **Fail**: Marks task failed with reason
+   - **Complete**: Finalizes task (GitButler auto-commits)
+   - **Fail**: Marks task failed, optionally deletes stack
    - **Approve/Deny**: Responds to permission prompt
 
 3. **Document Viewer:**
@@ -726,10 +756,12 @@ open http://localhost:8000
 
 | Term | Definition |
 |------|------------|
-| **Task** | A unit of work with its own tmux process and GitButler branch |
+| **Task** | A unit of work with its own tmux process and GitButler stack |
 | **tmux process** | Terminal session that persists for task lifetime |
 | **Claude session** | Ephemeral Claude Code instance within tmux (can be restarted) |
-| **GitButler branch** | Feature branch managed by GitButler for task changes |
+| **GitButler stack** | Virtual branch managed by GitButler for task changes (multiple can run in parallel) |
+| **Stack CLI ID** | Short identifier (e.g., `tm`, `zl`) used by `but` commands to reference a stack |
 | **Document** | A tracked markdown file providing context |
 | **Reference** | A link from a task to specific lines in a document |
 | **Permission Prompt** | When Claude asks for confirmation (y/n) |
+| **`but`** | GitButler CLI command (e.g., `but status`, `but commit`) |
