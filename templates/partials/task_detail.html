@@ -1,3 +1,12 @@
+<!-- Auto-refresh wrapper for running/waiting tasks -->
+<div id="task-detail-content"
+     {% if task.status.value in ['running', 'waiting'] %}
+     hx-get="/dashboard/tasks/{{ task.id }}"
+     hx-trigger="every 3s"
+     hx-target="#task-detail"
+     hx-swap="innerHTML"
+     {% endif %}>
+
 <div class="panel-header">
     <span>{{ task.title }}</span>
     <span class="task-status status-{{ task.status.value }}">{{ task.status.value }}</span>
@@ -125,3 +134,5 @@
 </form>
 {% endif %}
 {% endif %}
+
+</div><!-- end task-detail-content -->

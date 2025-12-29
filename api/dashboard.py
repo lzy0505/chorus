@@ -99,14 +99,13 @@ async def get_task_detail(
     task_id: int,
     db: Session = Depends(get_db),
 ):
-    """Get task detail as HTML partial."""
+    """Get task detail as HTML partial with OOB task list update."""
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return templates.TemplateResponse(
-        request, "partials/task_detail.html", {"task": task}
-    )
+    # Return detail with OOB swap for task list item
+    return _render_task_with_oob(request, task)
 
 
 @router.get("/tasks/{task_id}/output", response_class=HTMLResponse)
