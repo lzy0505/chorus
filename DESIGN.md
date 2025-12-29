@@ -297,17 +297,16 @@ Get task details including document references.
 Update task fields (title, description, priority).
 
 #### `POST /api/tasks/{task_id}/start`
-Start the task — creates stack, sets env var, spawns tmux, launches Claude.
+Start the task — creates stack, spawns tmux, launches Claude.
 
 **Implementation:**
 1. Generate stack name: `task-{id}-{slug}`
 2. Create GitButler stack: `but branch new {stack_name} -j`
 3. Spawn tmux: `tmux new-session -d -s task-{id} -c {project_root}`
-4. Set stack env var in tmux: `tmux set-environment -t task-{id} CHORUS_TASK_STACK {stack_name}`
-5. Start Claude: `tmux send-keys "claude" Enter`
-6. Build prompt with task description + document references
-7. Send prompt: `tmux send-keys "{prompt}" Enter`
-8. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_name = {stack_name}`
+4. Start Claude: `tmux send-keys "claude" Enter`
+5. Build prompt with task description + document references
+6. Send prompt: `tmux send-keys "{prompt}" Enter`
+7. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_name = {stack_name}`
 
 #### `POST /api/tasks/{task_id}/restart-claude`
 Restart Claude session within the task's tmux.
@@ -492,6 +491,15 @@ async def hook_session_end(payload: HookPayload):
     task.claude_status = "stopped"
     task.claude_session_id = None
     emit_event("claude_status", task)
+
+@router.post("/api/hooks/tooluse")
+async def hook_tool_use(payload: HookPayload):
+    """Claude used a file-modifying tool - commit to task's stack"""
+    if payload.tool_name not in ("Edit", "MultiEdit", "Write"):
+        return  # Only commit after file edits
+    task = find_task_by_session(payload.session_id)
+    if task and task.stack_name:
+        run_command(f"but commit -c {task.stack_name}")
 ```
 
 **Benefits over polling:**
@@ -529,91 +537,50 @@ but branch delete {stack} --force
 ```
 
 **Per-Task Stack Assignment (Concurrent Tasks):**
-Each tmux session has its own `CHORUS_TASK_STACK` environment variable, enabling truly concurrent tasks:
+Chorus manages commits centrally — no environment variables needed.
 
 ```
 tmux-1 (task 1):                    tmux-2 (task 2):
-CHORUS_TASK_STACK=task-1-auth       CHORUS_TASK_STACK=task-2-api
-    ↓                                   ↓
 Claude edits files                  Claude edits files
     ↓                                   ↓
-Custom hook reads env var           Custom hook reads env var
+PostToolUse hook → notify Chorus    PostToolUse hook → notify Chorus
+    ↓                                   ↓
+Chorus looks up task by session_id  Chorus looks up task by session_id
     ↓                                   ↓
 but commit -c task-1-auth           but commit -c task-2-api
 ```
 
 **How it works:**
-1. When starting a task, Chorus sets `CHORUS_TASK_STACK=task-{id}-{slug}` in the tmux environment
-2. A custom PostToolUse hook reads this env var after each file edit
-3. The hook runs `but commit -c $CHORUS_TASK_STACK` to commit to the task's stack
-4. Each tmux session is isolated — concurrent tasks commit to their own stacks
+1. Chorus tracks `task.stack_name` in the database
+2. A lightweight PostToolUse hook notifies Chorus after file edits
+3. Chorus looks up the task by `session_id` and retrieves `stack_name`
+4. Chorus runs `but commit -c {stack_name}` to commit to the correct stack
 
 **Task Lifecycle:**
 ```
 Task Start:
-  1. but branch new task-{id}-{slug}              # Create stack
-  2. tmux set-environment CHORUS_TASK_STACK ...   # Set env in tmux
-  3. Start Claude in tmux                         # Custom hook routes commits
+  1. but branch new task-{id}-{slug}    # Create stack
+  2. Store stack_name in task record    # Chorus tracks it
+  3. Start Claude in tmux               # Chorus routes commits
 
 Task Complete:
-  1. Kill tmux session                            # Cleanup (env var gone)
+  1. Kill tmux session
 
 Task Fail:
   1. Optionally: but branch delete {stack} --force
   2. Kill tmux session
 ```
 
-**Note:** This replaces `but mark` for concurrent task support. The custom hook replaces GitButler's `but claude post-tool` to enable stack-aware commits.
-
-**Auto-Commit via Custom Hook:**
-Chorus uses a custom PostToolUse hook instead of GitButler's default `but claude post-tool`:
-
-```python
-# .claude/hooks/chorus-commit.py
-#!/usr/bin/env python3
-import os, subprocess, json, sys
-
-# Read hook payload from stdin
-payload = json.load(sys.stdin)
-tool_name = payload.get("tool_name", "")
-
-# Only commit after file-modifying tools
-if tool_name not in ("Edit", "MultiEdit", "Write"):
-    sys.exit(0)
-
-# Read stack name from tmux environment
-stack = os.environ.get("CHORUS_TASK_STACK")
-if not stack:
-    sys.exit(0)  # No stack set, skip
-
-# Commit to the task's stack
-subprocess.run(["but", "commit", "-c", stack], capture_output=True)
-```
-
-This hook is configured in `.claude/settings.local.json`:
-```json
-{
-  "hooks": {
-    "PostToolUse": [{
-      "matcher": "Edit|MultiEdit|Write",
-      "hooks": [{"type": "command", "command": ".claude/hooks/chorus-commit.py"}]
-    }]
-  }
-}
-```
-
-**Note:** This replaces GitButler's `but claude post-tool` to enable per-task stack routing.
-
 **Chorus + GitButler Architecture:**
 ```
-Claude Code (in tmux with CHORUS_TASK_STACK env var)
+Claude Code (in tmux)
     ↓ Edit/Write tool
-Custom hook (chorus-commit.py)
-    ↓ Reads CHORUS_TASK_STACK from environment
-    ↓ but commit -c $CHORUS_TASK_STACK
-    ↓ Commits to task-specific stack
-Chorus hooks (SessionStart/Stop/etc)
-    ↓ Update task status in database
+PostToolUse hook
+    ↓ curl POST /api/hooks/tooluse (lightweight)
+Chorus API
+    ↓ Look up task by session_id → get stack_name
+    ↓ Run: but commit -c {stack_name}
+    ↓ Update task status
 Dashboard (real-time via SSE)
 ```
 

@@ -38,14 +38,13 @@
 
 - [ ] `services/gitbutler.py` - GitButler CLI integration
   - [ ] `create_stack(name)` - Create stack via `but branch new -j`
+  - [ ] `commit_to_stack(stack)` - Commit to stack via `but commit -c`
   - [ ] `get_status()` - Get workspace status via `but status -j`
   - [ ] `delete_stack(stack)` - Delete stack via `but branch delete --force`
   - [ ] `get_stack_commits(stack)` - Get commits via `but branch show -j`
 
-- [ ] `.claude/hooks/chorus-commit.py` - Custom commit hook
-  - [ ] Read `CHORUS_TASK_STACK` from tmux environment
-  - [ ] Run `but commit -c $CHORUS_TASK_STACK` after file edits
-  - [ ] Enable concurrent task commits to separate stacks
+- [ ] `api/hooks.py` - Add tooluse endpoint
+  - [ ] `POST /api/hooks/tooluse` - After file edit, commit to task's stack
 
 - [ ] `api/tasks.py` - Task lifecycle endpoints
   - [ ] `POST /api/tasks` - Create task
@@ -122,30 +121,28 @@ Key insight: Claude sessions are ephemeral (can hang, lose context) but the Task
 ### GitButler Integration
 Using GitButler CLI (`but`):
 - `but branch new {name} -j` - Create a new stack for a task
+- `but commit -c {stack}` - Commit to specific stack
 - `but status -j` - Get workspace status (JSON)
 - `but branch show {stack} -j` - Get commits in a stack
 - `but branch delete {stack} --force` - Delete a stack
-- `but commit -c {stack}` - Commit to specific stack (used by custom hook)
 
-**Per-Task Stack Assignment (via Environment Variable):**
-Each tmux session has `CHORUS_TASK_STACK` env var pointing to its stack.
-A custom PostToolUse hook commits to the correct stack after each file edit.
+**Per-Task Stack Assignment (Chorus-managed):**
+Chorus tracks `task.stack_name` in the database. When a file edit occurs:
+1. PostToolUse hook notifies Chorus (`/api/hooks/tooluse`)
+2. Chorus looks up task by `session_id` → gets `stack_name`
+3. Chorus runs `but commit -c {stack_name}`
 
 ```
-tmux-1: CHORUS_TASK_STACK=task-1-auth → commits to task-1-auth
-tmux-2: CHORUS_TASK_STACK=task-2-api  → commits to task-2-api
+tmux-1 (task 1): Claude edits → Chorus → but commit -c task-1-auth
+tmux-2 (task 2): Claude edits → Chorus → but commit -c task-2-api
 ```
 
 **Task Lifecycle:**
 ```
-Start:  but branch new → tmux set-environment CHORUS_TASK_STACK → start Claude
-Complete: kill tmux (env var cleaned up automatically)
+Start:  but branch new → store stack_name in DB → start Claude
+Complete: kill tmux
 Fail:   optionally but branch delete → kill tmux
 ```
-
-**Custom Hook (replaces `but claude post-tool`):**
-`.claude/hooks/chorus-commit.py` reads `CHORUS_TASK_STACK` and runs `but commit -c $stack`.
-This enables truly concurrent tasks with isolated stacks.
 
 ### Removed
 - `Session` model (replaced by task.tmux_session field)

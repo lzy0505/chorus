@@ -10,7 +10,7 @@ Task-centric orchestration for multiple Claude Code sessions. See `design.md` fo
 **Allowed (read-only):**
 - `git status`, `git diff`, `git log`, `git add`
 
-A custom Chorus hook (`.claude/hooks/chorus-commit.py`) handles commits to the correct stack based on `CHORUS_TASK_STACK` env var. Direct git commands bypass the system and cause conflicts.
+Chorus manages GitButler commits centrally. Direct git commands bypass the system and cause conflicts.
 
 **GitButler CLI (`but`):**
 - `but status` — View workspace with all stacks
@@ -18,7 +18,7 @@ A custom Chorus hook (`.claude/hooks/chorus-commit.py`) handles commits to the c
 - `but branch delete <stack> --force` — Delete a stack
 - `but commit -c <stack>` — Commit to specific stack
 
-**Per-Task Stack Assignment:** Each tmux session has `CHORUS_TASK_STACK` env var. A custom hook commits to the correct stack after file edits, enabling concurrent tasks.
+**Per-Task Stack Assignment:** Chorus tracks `task.stack_name` in DB. After file edits, Chorus commits to the correct stack via `but commit -c`. Concurrent tasks are fully supported.
 
 **Terminology:** GitButler uses "stacks" (virtual branches) that run in parallel. Multiple tasks can have concurrent stacks in the same workspace.
 
