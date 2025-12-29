@@ -15,8 +15,12 @@ GitButler hooks (`but claude pre-tool/post-tool/stop`) handle all commits automa
 **GitButler CLI (`but`):**
 - `but status` — View workspace with all stacks
 - `but branch new <name>` — Create a new stack
-- `but branch delete <stack>` — Delete a stack
+- `but mark <stack>` — Mark stack for auto-assignment (all new changes go here)
+- `but unmark` — Remove mark
+- `but branch delete <stack> --force` — Delete a stack
 - `but commit -m "msg" <stack>` — Manual commit (rarely needed)
+
+**Auto-Assignment:** When a stack is marked, all new file changes go to it. Once a file is in a stack, subsequent changes stay there (file ownership).
 
 **Terminology:** GitButler uses "stacks" (virtual branches) that run in parallel. Multiple tasks can have concurrent stacks in the same workspace.
 
