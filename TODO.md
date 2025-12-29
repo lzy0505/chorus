@@ -10,10 +10,8 @@
 
 <!-- Priority tasks - Phase 2: Task API + Hooks -->
 
-### GitButler Integration
-- [ ] Implement `services/gitbutler.py`
-  - [ ] `create_branch(name)` - Create feature branch
-  - [ ] `commit_changes(message)` - Commit via update_branches
+### ToolUse Hook
+- [ ] Add `POST /api/hooks/tooluse` endpoint for auto-commits after file edits
 
 ### Task API
 - [ ] Implement `api/tasks.py` - Full task lifecycle
@@ -49,6 +47,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement `services/gitbutler.py` with full test coverage (2025-12-29)
 - [x] Implement `api/hooks.py` with full test coverage (2025-12-29)
 - [x] Implement `services/hooks.py` with full test coverage (2025-12-29)
 - [x] Add `claude_session_id` field to Task model (2025-12-29)
