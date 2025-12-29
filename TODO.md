@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-29 01:32
+> Auto-updated by Claude Code. Last update: 2025-12-29 12:29
 
 ## In Progress
 
@@ -9,13 +9,6 @@
 ## Up Next
 
 <!-- Priority tasks - Phase 2: Task API + Monitor (tmux focus) -->
-
-### tmux Service (task-centric)
-- [ ] Update `services/tmux.py` with task-centric operations
-  - [ ] `create_task_session(task_id)` - Create tmux for a task
-  - [ ] `start_claude(task_id)` - Launch Claude in task's tmux
-  - [ ] `restart_claude(task_id)` - Kill and relaunch Claude
-  - [ ] `kill_task_session(task_id)` - Kill task's tmux
 
 ### Claude Status Detection
 - [ ] Implement `services/detector.py`
@@ -62,6 +55,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement task-centric TmuxService with tests (2025-12-29)
 - [x] Migrate to task-centric architecture (2025-12-29)
 - [x] Update all documentation (design.md, CLAUDE.md, PLAN.md)
 - [x] Update models.py (remove Session, enhance Task)
