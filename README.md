@@ -4,8 +4,9 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 
 ## Features
 
-- **Session Management**: Spawn, monitor, and interact with multiple Claude Code instances via tmux
-- **Task Coordination**: Create, prioritize, and assign tasks to sessions with contextual information
+- **Task Management**: Create, prioritize, and track tasks with their own tmux processes
+- **GitButler Integration**: Each task gets its own stack (virtual branch) with auto-commits
+- **Session Resilience**: Restart Claude Code sessions without losing task context
 - **Document Management**: View and reference markdown files as project instructions and context
 - **Real-time Dashboard**: Web UI with live status updates and permission request handling
 - **Desktop Notifications**: OS-level alerts when Claude needs attention
@@ -14,6 +15,7 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 
 - Python 3.11+
 - tmux
+- GitButler CLI (`but`) — for stack management and auto-commits
 - uv (recommended) or pip
 
 ## Quick Start

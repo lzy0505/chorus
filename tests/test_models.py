@@ -60,7 +60,8 @@ class TestTaskModel:
         assert task.description == ""
         assert task.priority == 0
         assert task.status == TaskStatus.pending
-        assert task.branch_name is None
+        assert task.stack_id is None
+        assert task.stack_name is None
         assert task.tmux_session is None
         assert task.claude_status == ClaudeStatus.stopped
         assert task.claude_restarts == 0
@@ -68,7 +69,6 @@ class TestTaskModel:
         assert task.permission_prompt is None
         assert task.started_at is None
         assert task.completed_at is None
-        assert task.commit_message is None
         assert task.result is None
 
     def test_task_with_timestamps(self, db: Session):
@@ -87,11 +87,12 @@ class TestTaskModel:
         assert task.started_at.replace(tzinfo=None) == now.replace(tzinfo=None)
         assert task.completed_at is None
 
-    def test_task_with_tmux_and_branch(self, db: Session):
-        """Test task with tmux session and branch."""
+    def test_task_with_tmux_and_stack(self, db: Session):
+        """Test task with tmux session and GitButler stack."""
         task = Task(
             title="Feature Task",
-            branch_name="feat/auth",
+            stack_id="tm",
+            stack_name="task-1-auth",
             tmux_session="task-1",
             status=TaskStatus.running,
             claude_status=ClaudeStatus.busy,
@@ -100,7 +101,8 @@ class TestTaskModel:
         db.commit()
         db.refresh(task)
 
-        assert task.branch_name == "feat/auth"
+        assert task.stack_id == "tm"
+        assert task.stack_name == "task-1-auth"
         assert task.tmux_session == "task-1"
         assert task.status == TaskStatus.running
         assert task.claude_status == ClaudeStatus.busy
@@ -136,13 +138,12 @@ class TestTaskModel:
         assert task.permission_prompt == "Allow write to file.py? (y/n)"
 
     def test_task_completed(self, db: Session):
-        """Test completed task with result."""
+        """Test completed task with result (commit messages handled by GitButler)."""
         now = datetime.now(timezone.utc)
         task = Task(
             title="Done Task",
             status=TaskStatus.completed,
             completed_at=now,
-            commit_message="feat: implement auth system",
             result="Successfully implemented OAuth2 authentication",
         )
         db.add(task)
@@ -151,7 +152,6 @@ class TestTaskModel:
 
         assert task.status == TaskStatus.completed
         assert task.completed_at is not None
-        assert task.commit_message == "feat: implement auth system"
         assert task.result == "Successfully implemented OAuth2 authentication"
 
     def test_task_failed(self, db: Session):
