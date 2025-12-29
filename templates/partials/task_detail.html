@@ -32,7 +32,7 @@
 <div class="task-actions">
     {% if task.status.value == 'pending' %}
     <button class="btn btn-primary"
-            hx-post="/api/tasks/{{ task.id }}/start"
+            hx-post="/dashboard/tasks/{{ task.id }}/start"
             hx-target="#task-detail"
             hx-swap="innerHTML">
         Start Task
@@ -47,19 +47,19 @@
 
     {% elif task.status.value == 'running' %}
     <button class="btn btn-secondary"
-            hx-post="/api/tasks/{{ task.id }}/restart-claude"
+            hx-post="/dashboard/tasks/{{ task.id }}/restart-claude"
             hx-target="#task-detail"
             hx-swap="innerHTML">
         Restart Claude
     </button>
     <button class="btn btn-success"
-            hx-post="/api/tasks/{{ task.id }}/complete"
+            hx-post="/dashboard/tasks/{{ task.id }}/complete"
             hx-target="#task-detail"
             hx-swap="innerHTML">
         Complete
     </button>
     <button class="btn btn-danger"
-            hx-post="/api/tasks/{{ task.id }}/fail"
+            hx-post="/dashboard/tasks/{{ task.id }}/fail"
             hx-target="#task-detail"
             hx-swap="innerHTML">
         Fail
