@@ -149,11 +149,16 @@ class TestProjectRoot:
         cfg = default_config()
         assert isinstance(cfg.project_root, Path)
 
-    def test_project_root_from_env(self, monkeypatch, tmp_path):
-        """Test project_root can be set via environment."""
-        monkeypatch.setenv("PROJECT_ROOT", str(tmp_path))
-        cfg = default_config()
-        assert cfg.project_root == tmp_path
+    def test_project_root_from_load_config(self, tmp_path):
+        """Test project_root is set from load_config argument."""
+        config_file = tmp_path / "test.toml"
+        config_file.write_text("[server]\nport = 8000\n")
+
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        cfg = load_config(config_file, project_root=project_dir)
+        assert cfg.project_root == project_dir
 
 
 class TestTomlLoading:
@@ -177,13 +182,17 @@ poll_interval = 2.0
 [editor]
 command = "nano"
 """)
-        cfg = load_config(config_file)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        cfg = load_config(config_file, project_root=project_dir)
         assert cfg.server.host == "0.0.0.0"
         assert cfg.server.port == 9000
         assert cfg.database.url == "sqlite:///test.db"
         assert cfg.tmux.session_prefix == "test"
         assert cfg.tmux.poll_interval == 2.0
         assert cfg.editor == "nano"
+        assert cfg.project_root == project_dir
 
     def test_load_config_with_defaults(self, tmp_path):
         """Test loading partial config uses defaults."""
@@ -192,7 +201,10 @@ command = "nano"
 [server]
 port = 8080
 """)
-        cfg = load_config(config_file)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        cfg = load_config(config_file, project_root=project_dir)
         assert cfg.server.port == 8080
         assert cfg.server.host == "127.0.0.1"  # default
         assert cfg.tmux.session_prefix == "claude"  # default
@@ -200,7 +212,7 @@ port = 8080
     def test_load_config_file_not_found(self, tmp_path):
         """Test loading non-existent config raises error."""
         with pytest.raises(FileNotFoundError):
-            load_config(tmp_path / "nonexistent.toml")
+            load_config(tmp_path / "nonexistent.toml", project_root=tmp_path)
 
 
 class TestGlobalConfig:
