@@ -46,18 +46,19 @@
 - [x] `api/hooks.py` - Add tooluse endpoint ✅
   - [x] `POST /api/hooks/posttooluse` - After file edit, commit to task's stack
 
-- [ ] `api/tasks.py` - Task lifecycle endpoints
-  - [ ] `POST /api/tasks` - Create task
-  - [ ] `GET /api/tasks` - List tasks
-  - [ ] `GET /api/tasks/{id}` - Get task details
-  - [ ] `PUT /api/tasks/{id}` - Update task
-  - [ ] `POST /api/tasks/{id}/start` - Start task (stack + tmux + Claude)
-  - [ ] `POST /api/tasks/{id}/restart-claude` - Restart Claude session
-  - [ ] `POST /api/tasks/{id}/send` - Send message to Claude
-  - [ ] `POST /api/tasks/{id}/respond` - Respond to permission prompt
-  - [ ] `POST /api/tasks/{id}/complete` - Complete task (finalize, GitButler auto-commits)
-  - [ ] `POST /api/tasks/{id}/fail` - Mark task as failed, optionally delete stack
-  - [ ] `DELETE /api/tasks/{id}` - Delete pending/failed task
+- [x] `api/tasks.py` - Task lifecycle endpoints ✅
+  - [x] `POST /api/tasks` - Create task
+  - [x] `GET /api/tasks` - List tasks
+  - [x] `GET /api/tasks/{id}` - Get task details
+  - [x] `PUT /api/tasks/{id}` - Update task
+  - [x] `POST /api/tasks/{id}/start` - Start task (stack + tmux + Claude)
+  - [x] `POST /api/tasks/{id}/restart-claude` - Restart Claude session
+  - [x] `POST /api/tasks/{id}/send` - Send message to Claude
+  - [x] `POST /api/tasks/{id}/respond` - Respond to permission prompt
+  - [x] `POST /api/tasks/{id}/complete` - Complete task (finalize, GitButler auto-commits)
+  - [x] `POST /api/tasks/{id}/fail` - Mark task as failed, optionally delete stack
+  - [x] `DELETE /api/tasks/{id}` - Delete pending/failed task
+  - [x] `GET /api/tasks/{id}/output` - Get terminal output
 
 - [ ] `api/events.py` - SSE endpoint
   - [ ] Event queue

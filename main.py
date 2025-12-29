@@ -50,12 +50,13 @@ async def health():
 
 # API routers
 from api.hooks import router as hooks_router
+from api.tasks import router as tasks_router
 
 app.include_router(hooks_router)
+app.include_router(tasks_router)
 
 # TODO: Include remaining API routers
-# from api import tasks, documents, events
-# app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+# from api import documents, events
 # app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 # app.include_router(events.router, prefix="/api", tags=["events"])
 
