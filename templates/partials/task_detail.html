@@ -15,7 +15,7 @@
         </div>
         <div class="info-item">
             <span class="label">Claude:</span>
-            <span class="value claude-{{ task.claude_status.value }}">{{ task.claude_status.value }}</span>
+            <span class="value claude-{{ task.claude_status.value }}">{% if task.status.value == 'pending' and task.claude_status.value == 'stopped' %}Not started{% else %}{{ task.claude_status.value }}{% endif %}</span>
         </div>
         <div class="info-item">
             <span class="label">Restarts:</span>
