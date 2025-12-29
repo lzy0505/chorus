@@ -1,4 +1,4 @@
-# Claude Session Orchestrator - Development Guide
+# Chorus — Task-Centric Claude Session Orchestrator
 
 ## Task Tracking (IMPORTANT)
 
@@ -14,7 +14,7 @@
 
 ### PLAN.md
 - Shows implementation phases and progress
-- Mark items with ✅ when phase/task is complete
+- Mark items with checkmark when phase/task is complete
 - Mark current phase with 🔄
 - Add notes for decisions, blockers, or context
 
@@ -30,20 +30,32 @@ The TodoWrite tool syncs with TODO.md via hooks automatically.
 
 ## Project Overview
 
-This is a lightweight orchestration system for managing multiple Claude Code sessions working on a single large project. The full specification is in `design.md`.
+Chorus is a lightweight orchestration system for managing multiple Claude Code tasks working on a single large project. The full specification is in `design.md`.
+
+### Core Concept
+
+```
+Task = tmux process + GitButler branch + ephemeral Claude sessions
+```
+
+- **Task** is the primary entity — represents a unit of work
+- **tmux process** persists for the task's lifetime — provides isolation
+- **Claude sessions** are ephemeral — can be restarted within the same tmux
+- **GitButler branch** tracks all changes — commits automatically on task completion
 
 ## Tech Stack
 
 - **Backend**: FastAPI + SQLModel + SQLite
 - **Frontend**: htmx + Jinja2 templates + SSE for real-time updates
-- **Session Management**: tmux for process isolation
+- **Process Isolation**: tmux (one per task)
+- **Git Integration**: GitButler MCP for branch/commit management
 - **Notifications**: OS-native (osascript on macOS, notify-send on Linux)
 
 ## Development Workflow
 
 - Run `uv run python main.py` to start the dev server
 - API docs available at http://localhost:8000/docs
-- After code changes, run gitbutler mcp update_branches (do NOT use git commit)
+- After code changes, run `gitbutler mcp update_branches` (do NOT use git commit)
 
 ## Project Structure
 
@@ -51,17 +63,17 @@ This is a lightweight orchestration system for managing multiple Claude Code ses
 chorus/
 ├── main.py              # FastAPI entry point
 ├── config.py            # Configuration settings
-├── models.py            # SQLModel definitions
+├── models.py            # SQLModel definitions (Task, Document, DocumentReference)
 ├── database.py          # Database setup
 ├── api/                 # API routers
-│   ├── sessions.py      # Session endpoints
-│   ├── tasks.py         # Task endpoints
+│   ├── tasks.py         # Task lifecycle endpoints
 │   ├── documents.py     # Document endpoints
 │   └── events.py        # SSE stream
 ├── services/            # Business logic
 │   ├── tmux.py          # Tmux wrapper
-│   ├── monitor.py       # Session polling
-│   ├── detector.py      # Status detection
+│   ├── monitor.py       # Task polling loop
+│   ├── detector.py      # Claude status detection
+│   ├── gitbutler.py     # GitButler MCP integration
 │   ├── documents.py     # Document manager
 │   └── notifier.py      # Desktop notifications
 ├── templates/           # Jinja2 templates
@@ -71,48 +83,79 @@ chorus/
 └── static/              # CSS and assets
 ```
 
-## Implementation Phases
+## Key Architecture Patterns
 
-Follow phases from `design.md`:
-1. Core Foundation (config, models, tmux wrapper)
-2. Session API + Monitor (status detection, SSE)
-3. Task API (CRUD, assignment)
-4. Document API (discovery, references)
-5. Dashboard (htmx UI)
-6. Polish (error handling, edge cases)
+### Task Lifecycle
 
-## Key Patterns
+```
+pending → running ↔ waiting → completed
+                          ↘ failed
+```
+
+1. **Create Task** (`pending`) — user creates task with description
+2. **Start Task** → creates GitButler branch, spawns tmux, launches Claude
+3. **Monitor** → poll tmux output, detect Claude status
+4. **Restart Claude** → if session hangs, restart within same tmux
+5. **Complete Task** → generate commit message, commit via GitButler, kill tmux
+
+### Claude Session Management
+
+Claude sessions within a task's tmux are ephemeral:
+- Can hang, lose context, or crash
+- Restart by killing Claude (Ctrl+C) and relaunching
+- Track restart count per task
+- Optionally resend context on restart
+
+### tmux Commands
+
+```bash
+# Create session for task
+tmux new-session -d -s task-{id} -c {project_root}
+
+# Start Claude
+tmux send-keys -t task-{id} "claude" Enter
+
+# Capture output (for status detection)
+tmux capture-pane -t task-{id} -p -S -100
+
+# Kill Claude (Ctrl+C)
+tmux send-keys -t task-{id} C-c
+
+# Kill session
+tmux kill-session -t task-{id}
+```
 
 ### Status Detection
+
 ```python
-# Session statuses: idle, busy, waiting, stopped
-# Check terminal output for patterns:
-# - ">" or "claude>" at end = idle
-# - "(y/n)" or "Allow?" = waiting
-# - Otherwise = busy
+# Claude at prompt, waiting for input
+IDLE: r">\s*$" or r"claude>\s*$"
+
+# Claude asking for permission
+WAITING: r"\(y/n\)", r"Allow\?", r"Do you want to"
+
+# Otherwise → BUSY
 ```
 
-### SSE Events
+### GitButler Integration
+
+```bash
+# Create feature branch for task
+gitbutler mcp create_branch --name "feat/{task-slug}"
+
+# Commit on task completion
+gitbutler mcp update_branches
 ```
-event: session_status   # Session status changed
-event: task_update      # Task status changed
-event: document_change  # Document modified
-```
 
-### Task Assignment
-When assigning a task:
-1. Fetch task and its DocumentReferences
-2. Read line ranges from referenced documents
-3. Build prompt with context
-4. Send via `tmux send-keys`
+## Implementation Phases
 
-## Conventions
+See `PLAN.md` for current progress. Priority is on tmux/task management:
 
-- Use async/await for I/O operations
-- Keep API endpoints thin, logic in services/
-- Return Pydantic models from API endpoints
-- Use dependency injection for database sessions
-- Emit SSE events for any state changes
+1. **Phase 1**: Core Foundation (DONE)
+2. **Phase 2**: Task API + Monitor (CURRENT - tmux focus)
+3. **Phase 3**: Document API
+4. **Phase 4**: Dashboard
+5. **Phase 5**: Polish
 
 ## Testing
 
@@ -124,34 +167,15 @@ uv run pytest
 # Run with coverage
 uv run pytest --cov
 
-# Run specific test file
-uv run pytest tests/test_models.py
-
-# Run tests matching a pattern
-uv run pytest -k "session"
-
 # Skip integration tests (require tmux)
 uv run pytest -m "not integration"
 ```
 
 ### Test Structure
-- `tests/conftest.py` - Fixtures (db, client, temp dirs)
+- `tests/conftest.py` - Fixtures
 - `tests/test_models.py` - SQLModel tests
-- `tests/test_services.py` - Service layer tests (mocked)
+- `tests/test_services.py` - Service layer tests
 - `tests/test_api.py` - API endpoint tests
-
-### Writing Tests
-- Use `db` fixture for database tests
-- Use `client` fixture for API tests
-- Mock external calls (tmux, filesystem) in service tests
-- Mark slow/integration tests with `@pytest.mark.slow` or `@pytest.mark.integration`
-
-### Manual Testing
-Run checklist from `design.md`:
-- Create/monitor/kill sessions
-- Create/assign/complete tasks
-- Discover/view/reference documents
-- Real-time dashboard updates
 
 ## Environment Variables
 
@@ -159,4 +183,5 @@ Run checklist from `design.md`:
 PROJECT_ROOT=/path/to/project  # Required
 EDITOR=nvim                    # Optional
 PORT=8000                      # Optional
+POLL_INTERVAL=1.0              # Status polling interval
 ```

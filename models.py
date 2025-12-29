@@ -1,28 +1,28 @@
-"""SQLModel definitions for Claude Session Orchestrator."""
+"""SQLModel definitions for Chorus - Task-Centric Claude Session Orchestrator."""
 
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlmodel import Field, SQLModel, Relationship
-
-
-class SessionStatus(str, Enum):
-    """Session status enum."""
-    idle = "idle"
-    busy = "busy"
-    waiting = "waiting"
-    stopped = "stopped"
+from sqlmodel import Field, SQLModel
 
 
 class TaskStatus(str, Enum):
-    """Task status enum."""
-    pending = "pending"
-    assigned = "assigned"
-    in_progress = "in_progress"
-    blocked = "blocked"
-    completed = "completed"
-    failed = "failed"
+    """Task lifecycle status."""
+    pending = "pending"      # Task created, not yet started (no tmux, no branch)
+    running = "running"      # tmux process active, Claude is working
+    waiting = "waiting"      # Claude is asking for permission
+    completed = "completed"  # Task finished, changes committed via GitButler
+    failed = "failed"        # Task failed or was cancelled
+
+
+class ClaudeStatus(str, Enum):
+    """Claude session status within a task's tmux process."""
+    stopped = "stopped"      # Claude not running in tmux (can be restarted)
+    starting = "starting"    # Claude is initializing
+    idle = "idle"            # Claude at prompt, waiting for input
+    busy = "busy"            # Claude is processing
+    waiting = "waiting"      # Claude asking for permission
 
 
 class DocumentCategory(str, Enum):
@@ -34,29 +34,40 @@ class DocumentCategory(str, Enum):
     general = "general"
 
 
-class Session(SQLModel, table=True):
-    """A tmux session running Claude Code."""
-    id: str = Field(primary_key=True)  # format: claude-{name}
-    task_id: Optional[int] = Field(default=None, foreign_key="task.id")
-    status: SessionStatus = Field(default=SessionStatus.idle)
-    last_output: str = Field(default="")
-    permission_prompt: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
 class Task(SQLModel, table=True):
-    """A unit of work to be assigned to a session."""
+    """A unit of work with its own tmux process and GitButler branch.
+
+    This is the primary entity in Chorus. Each task:
+    - Runs in its own tmux process for isolation
+    - Is attached to a GitButler feature branch
+    - Can have multiple Claude sessions (restartable)
+    """
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     description: str = Field(default="")
     priority: int = Field(default=0)
     status: TaskStatus = Field(default=TaskStatus.pending)
-    session_id: Optional[str] = Field(default=None, foreign_key="session.id")
+
+    # GitButler integration
+    branch_name: Optional[str] = Field(default=None)  # e.g., "feat/auth"
+
+    # tmux process
+    tmux_session: Optional[str] = Field(default=None)  # e.g., "task-1"
+
+    # Claude session state (ephemeral, can be restarted)
+    claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
+    claude_restarts: int = Field(default=0)
+    last_output: str = Field(default="")  # Last ~2000 chars of terminal output
+    permission_prompt: Optional[str] = Field(default=None)
+
+    # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = Field(default=None)
+    started_at: Optional[datetime] = Field(default=None)  # When tmux was spawned
     completed_at: Optional[datetime] = Field(default=None)
-    result: Optional[str] = Field(default=None)
+
+    # Completion info
+    commit_message: Optional[str] = Field(default=None)  # Generated on completion
+    result: Optional[str] = Field(default=None)  # Notes or failure reason
 
 
 class Document(SQLModel, table=True):
@@ -73,7 +84,7 @@ class DocumentReference(SQLModel, table=True):
     """A reference to specific lines in a document, linked to a task."""
     id: Optional[int] = Field(default=None, primary_key=True)
     document_id: int = Field(foreign_key="document.id")
-    task_id: Optional[int] = Field(default=None, foreign_key="task.id")
+    task_id: int = Field(foreign_key="task.id")  # Now required (was optional)
     start_line: int
     end_line: int
     note: Optional[str] = Field(default=None)
