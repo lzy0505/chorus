@@ -97,12 +97,14 @@ class TestTmuxServiceCreateSession:
 class TestTmuxServiceStartClaude:
     """Tests for TmuxService.start_claude."""
 
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
-    def test_start_claude_success(self, mock_run, mock_exists):
+    def test_start_claude_success(self, mock_run, mock_exists, mock_env_get):
         """Test starting Claude in existing session with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
 
         service = TmuxService()
         service.start_claude(42)
@@ -113,26 +115,24 @@ class TestTmuxServiceStartClaude:
              'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
         )
 
+    @patch("services.tmux._session_id_for_task")
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
-    @patch("services.tmux.time.sleep")
-    def test_start_claude_with_prompt(self, mock_sleep, mock_run, mock_exists):
+    def test_start_claude_with_prompt(self, mock_run, mock_exists, mock_env_get, mock_session_id):
         """Test starting Claude with initial prompt."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
+        mock_session_id.return_value = "claude-task-42"  # Use consistent session ID
 
         service = TmuxService()
         service.start_claude(42, initial_prompt="Hello Claude")
 
-        # Should call send-keys twice: once for 'claude' with config, once for prompt
-        assert mock_run.call_count == 2
-        calls = mock_run.call_args_list
-        assert calls[0] == call(
+        # Should call send-keys once with prompt included as argument to claude
+        mock_run.assert_called_once_with(
             ["send-keys", "-t", "claude-task-42",
-             'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
-        )
-        assert calls[1] == call(
-            ["send-keys", "-t", "claude-task-42", "Hello Claude", "Enter"]
+             'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude "Hello Claude"', "Enter"]
         )
 
     @patch("services.tmux.session_exists")
@@ -151,13 +151,15 @@ class TestTmuxServiceStartClaude:
 class TestTmuxServiceRestartClaude:
     """Tests for TmuxService.restart_claude."""
 
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
     @patch("services.tmux.time.sleep")
-    def test_restart_claude_success(self, mock_sleep, mock_run, mock_exists):
+    def test_restart_claude_success(self, mock_sleep, mock_run, mock_exists, mock_env_get):
         """Test restarting Claude with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
 
         service = TmuxService()
         service.restart_claude(42)

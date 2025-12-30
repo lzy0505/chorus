@@ -285,7 +285,9 @@ async def start_task(
     context_file = write_task_context(task, user_prompt=request.initial_prompt)
 
     # 7. Start Claude in tmux with context injected via --append-system-prompt
-    tmux.start_claude(task_id, context_file=context_file)
+    # Pass initial_prompt to send as a message (or default kickoff if None)
+    kickoff_message = request.initial_prompt or "Please read the task description and begin working on this task."
+    tmux.start_claude(task_id, initial_prompt=kickoff_message, context_file=context_file)
 
     return ActionResponse(
         status="ok",
@@ -317,8 +319,11 @@ async def restart_claude(
     # Get context file path (context was written when task started)
     context_file = get_context_file(task_id)
 
+    # Send a kickoff message to get Claude working after restart
+    kickoff_message = "Please continue working on this task."
+
     try:
-        tmux.restart_claude(task_id, context_file=context_file)
+        tmux.restart_claude(task_id, context_file=context_file, initial_prompt=kickoff_message)
     except SessionNotFoundError:
         raise HTTPException(
             status_code=500,
