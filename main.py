@@ -59,8 +59,29 @@ async def lifespan(app: FastAPI):
     # Startup
     _ensure_config()
     create_db_and_tables()
+
+    # Start status poller in hybrid mode (if enabled)
+    # Hooks provide fast updates, poller acts as safety net
+    config = get_config()
+    if config.status_polling.enabled:
+        from services.status_poller import get_status_poller
+        poller = get_status_poller(
+            interval=config.status_polling.interval,
+            frozen_threshold=config.status_polling.frozen_threshold
+        )
+        poller.start()
+        logger.info(f"Status poller started in hybrid mode (interval: {config.status_polling.interval}s, frozen_threshold: {config.status_polling.frozen_threshold}s)")
+    else:
+        poller = None
+        logger.info("Status polling disabled in configuration")
+
     yield
+
     # Shutdown
+    if poller is not None:
+        await poller.stop()
+        stats = poller.get_stats()
+        logger.info(f"Status poller stopped. Corrections made: {stats['correction_count']}")
     pass
 
 
@@ -70,6 +91,61 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+# Exception handlers
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError):
+    """Handle service errors (tmux, gitbutler, etc)."""
+    status_code = 500
+    error_type = "service_error"
+
+    if isinstance(exc, RecoverableError):
+        status_code = 409  # Conflict - can be retried
+        error_type = "recoverable_error"
+    elif isinstance(exc, UnrecoverableError):
+        status_code = 500
+        error_type = "unrecoverable_error"
+
+    logger.error(f"{error_type}: {exc}", exc_info=True)
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": error_type,
+            "message": str(exc),
+            "detail": "Check logs for more information",
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with detailed messages."""
+    logger.warning(f"Validation error: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Invalid request data",
+            "details": exc.errors(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler for unexpected errors."""
+    logger.exception(f"Unexpected error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": "An unexpected error occurred",
+            "detail": str(exc) if os.environ.get("DEBUG") else "Check logs",
+        },
+    )
+
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

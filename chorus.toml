@@ -40,3 +40,12 @@ patterns = [
     'Press Enter',
     'Continue\\?',
 ]
+
+[status_polling]
+# Hybrid status detection: hooks (fast) + polling (safety net)
+enabled = true
+interval = 5.0           # Poll every 5 seconds to verify status
+frozen_threshold = 300.0 # Warn if Claude busy > 5 minutes
+
+[notifications]
+enabled = true
