@@ -160,6 +160,7 @@ class TmuxService:
             env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
         env_prefix = " ".join(env_vars)
 
+        # Build Claude command with context and initial prompt
         if context_file and context_file.exists():
             # Use --append-system-prompt to inject task context
             # The context becomes part of Claude's system prompt for the entire session
@@ -167,14 +168,15 @@ class TmuxService:
         else:
             claude_cmd = f"{env_prefix} claude"
 
+        # If there's an initial prompt, pass it directly to Claude as an argument
+        # This is more reliable than waiting and sending keys via tmux
+        if initial_prompt:
+            # Escape the prompt for shell
+            escaped_prompt = initial_prompt.replace('"', '\\"')
+            claude_cmd += f' "{escaped_prompt}"'
+
         # Send the claude command
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
-
-        # If there's an initial prompt, wait a bit for Claude to start
-        # then send the prompt
-        if initial_prompt:
-            time.sleep(0.5)  # Give Claude time to initialize
-            self.send_keys(task_id, initial_prompt)
 
     def restart_claude(
         self,

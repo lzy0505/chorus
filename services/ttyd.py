@@ -119,12 +119,14 @@ class TtydService:
         # Build ttyd command
         # -W: writable (allow input)
         # -p: port
-        # tmux attach -t session: attach to existing tmux session
+        # Use 'setsid' to run tmux attach in its own session, preventing SIGHUP
+        # propagation when WebSocket clients disconnect
+        # This prevents page refreshes from killing processes in the tmux session
         cmd = [
             "ttyd",
             "-W",  # Writable
             "-p", str(port),
-            "tmux", "attach", "-t", session_id
+            "sh", "-c", f"setsid tmux attach -t {session_id}"
         ]
 
         try:
