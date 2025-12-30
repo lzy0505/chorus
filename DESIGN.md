@@ -90,11 +90,12 @@ Task = tmux process + GitButler stack + ephemeral Claude sessions
 |-----------|----------------|
 | **Web Dashboard** | UI for managing tasks, viewing documents, handling permissions |
 | **FastAPI Backend** | REST API + SSE; coordinates all components |
-| **Task Monitor** | Background polling of tmux processes, detecting Claude status |
+| **JSON Monitor** | Parse JSON events from Claude (`--output-format stream-json`), detect status, trigger GitButler commits |
+| **JSON Parser** | Parse `stream-json` format, extract events and session metadata |
 | **Document Manager** | Markdown file operations, outline parsing |
 | **GitButler Service** | Create/manage stacks via `but` CLI, monitor stack status |
 | **Desktop Notifier** | OS-native notifications for permission requests |
-| **tmux** | Process isolation per task |
+| **tmux** | Process isolation per task, capture JSON output |
 | **ttyd Service** | Web terminal access via iframe (optional) |
 
 ---
@@ -114,7 +115,8 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 | `status` | enum | `pending`, `running`, `waiting`, `completed`, `failed` |
 | `stack_id` | string? | GitButler stack CLI ID, nullable until started |
 | `tmux_session` | string? | tmux session ID, nullable until started |
-| `claude_session_id` | string? | Claude Code session ID (from hooks), nullable |
+| `claude_session_id` | string? | Legacy field (deprecated, to be removed) |
+| `json_session_id` | string? | Claude Code session ID (from JSON events), used for `--resume` |
 | `claude_status` | enum | `stopped`, `starting`, `idle`, `busy`, `waiting` |
 | `claude_restarts` | int | Number of times Claude was restarted in this task |
 | `last_output` | string | Last ~2000 chars of terminal output |
@@ -454,67 +456,57 @@ data: {"document_id": 1, "path": "docs/spec.md"}
 
 ## Component Implementation Details
 
-### Hook Handler Service
+### JSON Monitor Service
 
-**Purpose:** Receive Claude Code hook events and update task status in real-time.
+**Purpose:** Parse JSON events from Claude Code's `stream-json` output to track task status and trigger GitButler commits.
 
 **Architecture:**
 
 ```
-Claude Code (in tmux) → Hook fires → curl POST → Chorus API → Update task → SSE to dashboard
+Claude Code (--output-format stream-json) → tmux captures output → JSON Monitor polls tmux → Parse events → Update task → SSE to dashboard
 ```
 
-**API Endpoints:**
+**Key Components:**
 
 ```python
-@router.post("/api/hooks/start")
-async def hook_session_start(payload: HookPayload):
-    """Claude session started - map session_id to task"""
-    task = find_task_by_tmux(payload.cwd)
-    task.claude_session_id = payload.session_id
-    task.claude_status = "idle"
-    emit_event("claude_status", task)
+# services/json_parser.py
+class ClaudeJsonEvent:
+    """Dataclass for parsed JSON events"""
+    event_type: str  # "session_start", "tool_use", "tool_result", "text", "result", "error"
+    data: dict
+    session_id: Optional[str]
 
-@router.post("/api/hooks/stop")
-async def hook_stop(payload: HookPayload):
-    """Claude finished responding - now idle"""
-    task = find_task_by_session(payload.session_id)
-    task.claude_status = "idle"
-    emit_event("claude_status", task)
+class JsonEventParser:
+    """Parse stream-json output from Claude"""
+    def parse_line(line: str) -> Optional[ClaudeJsonEvent]
+    def parse_output(output: str) -> List[ClaudeJsonEvent]
 
-@router.post("/api/hooks/permission")
-async def hook_permission(payload: HookPayload):
-    """Claude waiting for permission"""
-    task = find_task_by_session(payload.session_id)
-    task.claude_status = "waiting"
-    task.status = "waiting"
-    task.permission_prompt = extract_prompt(payload.transcript_path)
-    send_desktop_notification(task.title, task.permission_prompt)
-    emit_event("task_status", task)
+# services/monitor.py
+class Monitor:
+    """Monitor Claude sessions via JSON events"""
+    async def _monitor_task(task_id: int):
+        output = tmux.capture_json_events(task_id)
+        events = json_parser.parse_output(output)
+        for event in events:
+            await _handle_event(task_id, event)
 
-@router.post("/api/hooks/end")
-async def hook_session_end(payload: HookPayload):
-    """Claude session ended"""
-    task = find_task_by_session(payload.session_id)
-    task.claude_status = "stopped"
-    task.claude_session_id = None
-    emit_event("claude_status", task)
-
-@router.post("/api/hooks/tooluse")
-async def hook_tool_use(payload: HookPayload):
-    """Claude used a file-modifying tool - commit to task's stack"""
-    if payload.tool_name not in ("Edit", "MultiEdit", "Write"):
-        return  # Only commit after file edits
-    task = find_task_by_session(payload.session_id)
-    if task and task.stack_name:
-        run_command(f"but commit -c {task.stack_name}")
+    async def _handle_event(task_id: int, event: ClaudeJsonEvent):
+        if event.event_type == "session_start":
+            task.json_session_id = event.session_id
+            task.claude_status = "idle"
+        elif event.event_type == "tool_result":
+            # Trigger GitButler commit after file edits
+            if is_file_edit_tool(event.data["tool_name"]):
+                gitbutler.commit_to_stack(task.stack_name)
+        elif event.event_type == "result":
+            # Extract session_id for resumption
+            task.json_session_id = event.session_id
 ```
 
-**Benefits over polling:**
-- Instant status updates (no 1s delay)
-- No terminal output parsing
-- Deterministic event detection
-- Lower resource usage
+**Key Features:**
+- **Session resumption** — Extract `session_id` from JSON for `--resume`
+- **Deterministic event detection** — Parse structured JSON events
+- **Self-contained monitoring** — Direct tmux output parsing
 
 ### GitButler Integration
 
@@ -758,83 +750,81 @@ def cleanup_task_context(task_id: int) -> None:
 | Claude Restart | Re-inject same context file |
 | Task Complete/Fail | Delete `/tmp/chorus/task-{id}/` directory |
 
-### Claude Code Hooks Integration
+### JSON Event Parsing
 
-Instead of polling terminal output, we use Claude Code's native hooks system for deterministic status detection.
+Chorus uses Claude Code's `--output-format stream-json` flag to get structured event data for deterministic status detection.
 
-**Hook Events Used:**
+**JSON Events Parsed:**
 
-| Event | Fires When | Status Change |
-|-------|------------|---------------|
-| `SessionStart` | Claude launches | `stopped` → `starting` → `idle` |
-| `Stop` | Claude finishes responding | `busy` → `idle` |
-| `PermissionRequest` | Permission dialog shown | → `waiting` |
-| `Notification` (idle_prompt) | Idle 60+ seconds | confirms `idle` |
-| `SessionEnd` | Claude exits | → `stopped` |
+| Event Type | When It Fires | Actions |
+|------------|---------------|---------|
+| `session_start` | Claude launches | Store `json_session_id`, set `claude_status = "idle"` |
+| `tool_use` | Claude calls a tool | Detect file edits (Edit, Write tools) |
+| `tool_result` | Tool completes | Trigger GitButler commit if file was modified |
+| `text` | Claude outputs text | Update task output stream |
+| `result` | Session completes | Extract final `session_id` for resumption |
+| `error` | Error occurs | Log error, update task status |
 
-**Isolated Config with Global Inheritance:**
+**Stream-JSON Format:**
 
-All Claude sessions share a configuration stored in `/tmp/chorus/hooks/.claude/`. This config is created by:
+Claude outputs newline-delimited JSON when launched with `--output-format stream-json`:
 
-1. **Copying** all files from `~/.claude/` (credentials, settings, projects, etc.)
-2. **Merging** Chorus-specific hooks into `settings.json`
+```json
+{"type":"session_start","session_id":"abc123"}
+{"type":"tool_use","tool":{"name":"Read","input":{"file_path":"README.md"}}}
+{"type":"tool_result","tool":"Read","result":"...file contents..."}
+{"type":"text","text":"I can see the README..."}
+{"type":"result","session_id":"abc123","stop_reason":"end_turn"}
+```
 
-This approach ensures spawned Claude sessions have:
-- **Login credentials** — No re-authentication needed
-- **User's global settings** — Permissions, model preferences, allowed tools
-- **Chorus hooks** — Task tracking, auto-commits, status updates
-
-All without polluting the user's global `~/.claude/` config.
+**Parsing Architecture:**
 
 ```python
-# services/hooks.py - ensure_hooks_config()
-def ensure_hooks_config(chorus_url=None, force=False):
-    config_dir = Path("/tmp/chorus/hooks/.claude")
+# services/json_parser.py
+class JsonEventParser:
+    def parse_line(self, line: str) -> Optional[ClaudeJsonEvent]:
+        """Parse a single line of JSON output"""
+        try:
+            data = json.loads(line)
+            event_type = data.get("type")
+            session_id = data.get("session_id")
+            return ClaudeJsonEvent(event_type=event_type, data=data, session_id=session_id)
+        except json.JSONDecodeError:
+            return None
 
-    # Copy entire global config (credentials, settings, etc.)
-    global_config_dir = Path.home() / ".claude"
-    if global_config_dir.exists():
-        shutil.copytree(global_config_dir, config_dir, dirs_exist_ok=True)
+    def parse_output(self, output: str) -> List[ClaudeJsonEvent]:
+        """Parse multiple lines of JSON output"""
+        events = []
+        for line in output.splitlines():
+            if event := self.parse_line(line):
+                events.append(event)
+        return events
 
-    # Merge Chorus hooks into settings.json
-    base_config = load_existing_settings()
-    chorus_hooks = generate_hooks_config(chorus_url)
-    merged = deep_merge_hooks(base_config, chorus_hooks)
-    write_settings(merged)
+# services/tmux.py
+def capture_json_events(task_id: int) -> str:
+    """Capture JSON events from tmux pane"""
+    session_id = f"task-{task_id}"
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-t", session_id, "-p"],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout
 ```
 
-**Chorus Hooks Added:**
+**Session Resumption:**
 
-```json
-{
-  "hooks": {
-    "Stop": [{ "type": "command", "command": "curl POST /api/hooks/stop ..." }],
-    "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "..." }] }],
-    "SessionStart": [{ "type": "command", "command": "..." }],
-    "SessionEnd": [{ "type": "command", "command": "..." }],
-    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "..." }] }]
-  }
-}
+The `json_session_id` extracted from events enables resuming Claude sessions:
+
+```bash
+# Initial session
+claude -p "Start working on auth" --output-format stream-json
+
+# Resume same session later
+claude -p "Continue" --resume <json_session_id> --output-format stream-json
 ```
 
-The config is task-agnostic — the API uses `session_id` from hook payloads to find the associated task. User's existing hooks are preserved; Chorus hooks are appended.
-
-Claude is launched with `CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude"` to use this shared configuration instead of the project's `.claude/` directory.
-
-**Hook Payload (received via stdin):**
-
-```json
-{
-  "session_id": "abc123",
-  "hook_event_name": "Stop",
-  "transcript_path": "/Users/.../.claude/projects/.../session.jsonl",
-  "cwd": "/path/to/project"
-}
-```
-
-**Session-to-Task Mapping:**
-
-Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming hook events with tasks. The hook handler reads JSON from stdin and forwards it to the Chorus API, which looks up the task by `session_id`.
+Chorus automatically uses `--resume` when sending follow-up messages to a task.
 
 ### Spawned Session Authentication
 

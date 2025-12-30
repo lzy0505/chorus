@@ -6,7 +6,8 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 
 - **Task Management**: Create, prioritize, and track tasks with their own tmux processes
 - **GitButler Integration**: Each task gets its own stack (virtual branch) with auto-commits
-- **Session Resilience**: Restart Claude Code sessions without losing task context
+- **JSON Event Monitoring**: Parse Claude's structured JSON output for deterministic status detection
+- **Session Resilience**: Restart Claude Code sessions without losing task context, with `--resume` support
 - **Document Management**: View and reference markdown files as project instructions and context
 - **Real-time Dashboard**: Web UI with live status updates and permission request handling
 - **Desktop Notifications**: OS-level alerts when Claude needs attention
@@ -63,6 +64,15 @@ uv run python main.py chorus.toml /absolute/path/to/project
 # Open dashboard
 open http://localhost:8000
 ```
+
+## How It Works
+
+Chorus monitors Claude Code sessions by parsing their structured JSON output:
+
+1. **Claude sessions** are launched with `--output-format stream-json` flag
+2. **JSON Monitor** polls tmux output and parses JSON events
+3. **Events** trigger status updates and GitButler auto-commits
+4. **Session IDs** from JSON enable resumption with `--resume`
 
 ## Configuration
 

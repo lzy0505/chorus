@@ -48,10 +48,42 @@ chorus/
 ├── models.py            # SQLModel definitions
 ├── database.py          # Database setup
 ├── api/                 # API routers (tasks, documents, events)
-├── services/            # Business logic (tmux, monitor, detector, gitbutler, notifier)
+├── services/            # Business logic (tmux, monitor, json_parser, gitbutler, notifier)
 ├── templates/           # Jinja2 templates
 └── static/              # CSS and assets
 ```
+
+## Architecture
+
+Chorus monitors Claude Code sessions via JSON event parsing:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ services/tmux.py                                             │
+│ └─ start_claude() → `claude -p --output-format stream-json` │
+│ └─ capture_json_events() → Parse JSON from tmux             │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ services/monitor.py (JSON Monitor)                          │
+│ └─ poll_json_events() → Parse stream-json from tmux         │
+│ └─ handle_tool_use() → Detect file edits                    │
+│ └─ handle_tool_result() → Trigger GitButler commit          │
+│ └─ handle_result() → Extract session_id for resumption      │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ services/gitbutler.py                                        │
+│ └─ commit_to_stack(stack_name)                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+- **Deterministic event detection** — Parse structured JSON events
+- **Session resumption** — Extract `session_id` from JSON for `--resume`
+- **Instant status updates** — Real-time event stream from Claude
 
 ## Development
 
