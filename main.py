@@ -1,19 +1,34 @@
 """Entry point for Chorus - Task-centric Claude orchestration."""
 
 import argparse
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from config import load_config, set_config, get_config
 from database import create_db_and_tables
+from services.error_handler import (
+    ServiceError,
+    RecoverableError,
+    UnrecoverableError,
+    log_service_error,
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 def _ensure_config():
