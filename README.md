@@ -18,6 +18,7 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 - GitButler CLI (`but`) — for stack management and auto-commits
 - ttyd (optional) — for web-based terminal access
 - uv (recommended) or pip
+- Claude Code with valid subscription (Pro/Max)
 
 ### Installing ttyd (optional)
 
@@ -32,6 +33,23 @@ apt install ttyd
 ```
 
 Without ttyd, tasks still work but won't have web terminal access.
+
+### Authentication Setup (Required)
+
+Chorus spawns multiple Claude Code sessions that need authentication. Since OAuth tokens from browser login don't transfer to isolated sessions, you must set up a long-lived token:
+
+```bash
+# 1. Generate OAuth token (one-time setup, opens browser)
+claude setup-token
+
+# 2. Set the token in your shell profile (~/.zshrc or ~/.bashrc)
+export CLAUDE_CODE_OAUTH_TOKEN="<token-from-step-1>"
+
+# 3. Reload your shell or source the profile
+source ~/.zshrc
+```
+
+Without this, spawned Claude sessions will show "Missing API Key / Run /login".
 
 ## Quick Start
 

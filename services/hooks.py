@@ -13,8 +13,9 @@ Hook events used:
 Isolation with Global Config Inheritance:
 Hooks are written to /tmp/chorus/hooks/.claude/ to avoid polluting
 the hosted project's working directory. The isolated config is created by:
-1. Copying all files from ~/.claude/ (credentials, settings, projects, etc.)
-2. Deep merging Chorus-specific hooks into settings.json
+1. Copying all files from ~/.claude/ (settings, projects, etc.)
+2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+3. Deep merging Chorus-specific hooks into settings.json
 
 This ensures each tmux session has access to:
 - Login credentials (no re-authentication needed for spawned sessions)
@@ -41,6 +42,17 @@ def get_global_config_dir() -> Path:
         Path to ~/.claude/
     """
     return Path.home() / ".claude"
+
+
+def get_global_credentials_path() -> Path:
+    """Get the path to the global Claude credentials file.
+
+    Claude stores credentials in ~/.claude.json (at home root, not inside .claude/).
+
+    Returns:
+        Path to ~/.claude.json
+    """
+    return Path.home() / ".claude.json"
 
 
 def get_global_config_path() -> Path:
@@ -156,25 +168,26 @@ def generate_hooks_config(chorus_url: Optional[str] = None) -> dict:
         f"r.urlopen(r.Request('{url}/api/hooks/' + d['hook_event_name'].lower(), " \
         "json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
 
-    # Events that don't need a matcher - use simple format
-    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools) - use nested format
-    matcher_events = ["PermissionRequest", "PostToolUse"]
-
+    # All hook events use the nested format with matcher and hooks array.
+    # Events like SessionStart/Stop/SessionEnd use empty matcher "" to match all.
+    # Events like PermissionRequest/PostToolUse use "*" to match all tools.
     hooks_config: dict = {"hooks": {}}
 
-    for event in no_matcher_events:
+    # Session lifecycle events - empty matcher matches everything
+    for event in ["SessionStart", "Stop", "SessionEnd"]:
         hooks_config["hooks"][event] = [
-            {"type": "command", "command": handler_script}
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": handler_script}]
+            }
         ]
 
-    for event in matcher_events:
+    # Tool-related events - "*" matcher matches all tools
+    for event in ["PermissionRequest", "PostToolUse"]:
         hooks_config["hooks"][event] = [
             {
                 "matcher": "*",
-                "hooks": [
-                    {"type": "command", "command": handler_script}
-                ]
+                "hooks": [{"type": "command", "command": handler_script}]
             }
         ]
 
@@ -202,21 +215,25 @@ def generate_hooks_config_with_handler(
     # Handler script receives JSON via stdin, url as env var
     command = f"CHORUS_URL={url} python {handler_path}"
 
-    # Events that don't need a matcher - use simple format
-    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools) - use nested format
-    matcher_events = ["PermissionRequest", "PostToolUse"]
-
+    # All hook events use the nested format with matcher and hooks array.
     hooks_config: dict = {"hooks": {}}
 
-    for event in no_matcher_events:
+    # Session lifecycle events - empty matcher matches everything
+    for event in ["SessionStart", "Stop", "SessionEnd"]:
         hooks_config["hooks"][event] = [
-            {"type": "command", "command": command}
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": command}]
+            }
         ]
 
-    for event in matcher_events:
+    # Tool-related events - "*" matcher matches all tools
+    for event in ["PermissionRequest", "PostToolUse"]:
         hooks_config["hooks"][event] = [
-            {"matcher": "*", "hooks": [{"type": "command", "command": command}]}
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": command}]
+            }
         ]
 
     return hooks_config
@@ -226,8 +243,9 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     """Ensure hooks configuration exists in the shared config directory.
 
     Creates /tmp/chorus/hooks/.claude/ by:
-    1. Copying all files from ~/.claude/ (credentials, settings, etc.)
-    2. Merging Chorus-specific hooks into settings.json
+    1. Copying all files from ~/.claude/ (settings, projects, etc.)
+    2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+    3. Merging Chorus-specific hooks into settings.json
 
     This ensures tmux sessions have access to:
     - Login credentials (no re-authentication needed)
@@ -235,6 +253,9 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     - Chorus-specific hooks for task tracking
 
     All without polluting the global config.
+
+    IMPORTANT: Credentials are ALWAYS refreshed from ~/.claude.json to ensure
+    spawned sessions pick up any authentication changes (e.g., after re-login).
 
     Args:
         chorus_url: Override the Chorus API URL (for testing).
@@ -246,20 +267,34 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     config_dir = get_hooks_config_dir()
     settings_path = config_dir / "settings.json"
 
-    # Check if we need to regenerate
+    # Always refresh credentials from ~/.claude.json to pick up auth changes
+    # This is critical: if user re-authenticates, spawned sessions need new creds
+    global_creds = get_global_credentials_path()
+    if global_creds.exists():
+        config_dir.mkdir(parents=True, exist_ok=True)
+        target_creds = config_dir / ".claude.json"
+        shutil.copy2(global_creds, target_creds)
+
+    # Check if we need to regenerate the full config (settings, hooks, etc.)
     if settings_path.exists() and not force:
         return config_dir
 
     # Remove existing config dir if forcing regeneration
     if config_dir.exists() and force:
         shutil.rmtree(config_dir)
+        config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy entire global config directory if it exists (includes credentials)
+    # Copy entire global config directory if it exists
     global_config_dir = get_global_config_dir()
     if global_config_dir.exists():
         shutil.copytree(global_config_dir, config_dir, dirs_exist_ok=True)
     else:
         config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy credentials again after copytree (in case it was overwritten)
+    if global_creds.exists():
+        target_creds = config_dir / ".claude.json"
+        shutil.copy2(global_creds, target_creds)
 
     # Load existing settings (from copied global config) or start fresh
     if settings_path.exists():
@@ -300,8 +335,11 @@ class HooksService:
     - Parsing hook payloads
 
     Hooks are written to /tmp/chorus/hooks/.claude/ - a shared location
-    for all Claude sessions. The config is created by copying all files from
-    ~/.claude/ (including credentials) and merging Chorus hooks into settings.json.
+    for all Claude sessions. The config is created by:
+    1. Copying all files from ~/.claude/ (settings, projects, etc.)
+    2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+    3. Merging Chorus hooks into settings.json
+
     This keeps the global config clean while providing full functionality and
     eliminating the need for re-authentication in spawned sessions.
     """

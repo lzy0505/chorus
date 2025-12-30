@@ -143,29 +143,25 @@ class TestGenerateHooksConfig:
             assert len(hook_list) == 1
 
             hook = hook_list[0]
+            # All events now use nested format: {"matcher": "...", "hooks": [...]}
+            assert "matcher" in hook
+            assert "hooks" in hook
+            assert hook["hooks"][0]["type"] == "command"
+            assert "command" in hook["hooks"][0]
+            # Session lifecycle events use empty matcher, tool events use "*"
             if hook_name in no_matcher_events:
-                # Simple format: {"type": "command", "command": "..."}
-                assert hook["type"] == "command"
-                assert "command" in hook
+                assert hook["matcher"] == ""
             else:
-                # Nested format: {"matcher": "*", "hooks": [...]}
-                assert "matcher" in hook
-                assert "hooks" in hook
-                assert hook["hooks"][0]["type"] == "command"
-                assert "command" in hook["hooks"][0]
+                assert hook["matcher"] == "*"
 
     def test_command_contains_url(self):
         """Test that hook commands contain the Chorus URL."""
         config = generate_hooks_config(chorus_url="http://test:9000")
 
-        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-
         for hook_name, hook_list in config["hooks"].items():
             hook = hook_list[0]
-            if hook_name in no_matcher_events:
-                command = hook["command"]
-            else:
-                command = hook["hooks"][0]["command"]
+            # All events now use nested format
+            command = hook["hooks"][0]["command"]
             assert "http://test:9000" in command
 
     def test_command_posts_to_correct_endpoint(self):
@@ -173,7 +169,8 @@ class TestGenerateHooksConfig:
         config = generate_hooks_config(chorus_url="http://localhost:8000")
 
         # Each hook should POST to /api/hooks/{event_name_lower}
-        session_start_cmd = config["hooks"]["SessionStart"][0]["command"]
+        # All events now use nested format
+        session_start_cmd = config["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         assert "/api/hooks/" in session_start_cmd
 
 
@@ -187,14 +184,10 @@ class TestGenerateHooksConfigWithHandler:
             chorus_url="http://localhost:8000",
         )
 
-        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-
         for hook_name, hook_list in config["hooks"].items():
             hook = hook_list[0]
-            if hook_name in no_matcher_events:
-                command = hook["command"]
-            else:
-                command = hook["hooks"][0]["command"]
+            # All events now use nested format
+            command = hook["hooks"][0]["command"]
             assert "/path/to/handler.py" in command
 
     def test_sets_environment_variables(self):
@@ -204,7 +197,8 @@ class TestGenerateHooksConfigWithHandler:
             chorus_url="http://test:9000",
         )
 
-        command = config["hooks"]["Stop"][0]["command"]
+        # All events now use nested format
+        command = config["hooks"]["Stop"][0]["hooks"][0]["command"]
         assert "CHORUS_URL=http://test:9000" in command
 
 
@@ -362,6 +356,12 @@ class TestGlobalConfigPaths:
         """Test that global config path points to ~/.claude/settings.json."""
         config_path = get_global_config_path()
         assert config_path == Path.home() / ".claude" / "settings.json"
+
+    def test_get_global_credentials_path(self):
+        """Test that global credentials path points to ~/.claude.json."""
+        from services.hooks import get_global_credentials_path
+        creds_path = get_global_credentials_path()
+        assert creds_path == Path.home() / ".claude.json"
 
 
 class TestDeepMergeHooks:
@@ -548,6 +548,57 @@ class TestEnsureHooksConfigWithGlobalConfig:
         settings = json.loads((test_dir / "settings.json").read_text())
         assert "hooks" in settings
         assert "SessionStart" in settings["hooks"]
+
+    def test_copies_credentials_file(self, tmp_path, monkeypatch):
+        """Test that ~/.claude.json credentials file is copied to config dir."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{}')
+
+        # Create credentials file at home root level (like ~/.claude.json)
+        global_creds = tmp_path / ".claude.json"
+        global_creds.write_text(json.dumps({
+            "oauthAccount": {"accessToken": "secret123"},
+            "userID": "user-abc",
+            "theme": "dark"
+        }))
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+        monkeypatch.setattr("services.hooks.get_global_credentials_path", lambda: global_creds)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # Credentials should be copied into config dir
+        copied_creds = test_dir / ".claude.json"
+        assert copied_creds.exists()
+        creds_data = json.loads(copied_creds.read_text())
+        assert "oauthAccount" in creds_data
+        assert creds_data["userID"] == "user-abc"
+
+    def test_works_without_credentials_file(self, tmp_path, monkeypatch):
+        """Test that config works even if ~/.claude.json doesn't exist."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{"model": "opus"}')
+
+        # No credentials file
+        global_creds = tmp_path / "nonexistent.json"
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+        monkeypatch.setattr("services.hooks.get_global_credentials_path", lambda: global_creds)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # Should still create config, just without credentials
+        assert test_dir.exists()
+        settings = json.loads((test_dir / "settings.json").read_text())
+        assert "hooks" in settings
 
 
 class TestHooksService:

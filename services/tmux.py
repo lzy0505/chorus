@@ -4,6 +4,7 @@ Each task gets its own tmux session where Claude Code runs.
 The tmux session persists even if Claude crashes/hangs, allowing restarts.
 """
 
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -151,7 +152,13 @@ class TmuxService:
         config_dir = get_hooks_config_dir()
 
         # Build the claude command with isolated config
-        env_prefix = f'CLAUDE_CONFIG_DIR="{config_dir}"'
+        # Pass through CLAUDE_CODE_OAUTH_TOKEN if set (for headless auth)
+        # See: https://github.com/anthropics/claude-code/issues/8938
+        env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+        oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if oauth_token:
+            env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
+        env_prefix = " ".join(env_vars)
 
         if context_file and context_file.exists():
             # Use --append-system-prompt to inject task context
@@ -201,7 +208,12 @@ class TmuxService:
         config_dir = get_hooks_config_dir()
 
         # Build the claude command with isolated config (same logic as start_claude)
-        env_prefix = f'CLAUDE_CONFIG_DIR="{config_dir}"'
+        # Pass through CLAUDE_CODE_OAUTH_TOKEN if set (for headless auth)
+        env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+        oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if oauth_token:
+            env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
+        env_prefix = " ".join(env_vars)
 
         if context_file and context_file.exists():
             claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})"'
