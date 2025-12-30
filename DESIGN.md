@@ -836,6 +836,60 @@ Claude is launched with `CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude"` to use t
 
 Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming hook events with tasks. The hook handler reads JSON from stdin and forwards it to the Chorus API, which looks up the task by `session_id`.
 
+### Spawned Session Authentication
+
+Spawned Claude sessions need authentication to work. Claude Code's OAuth subscription authentication doesn't automatically propagate to isolated config directories. This section documents the authentication design.
+
+**The Problem:**
+
+When `CLAUDE_CONFIG_DIR` is set to an isolated directory, Claude Code:
+1. Reads config/settings from that directory ✓
+2. But OAuth tokens from browser-based login don't transfer automatically ✗
+
+Simply copying `~/.claude.json` (which contains `oauthAccount` metadata) is **not sufficient** — it lacks the actual OAuth access tokens.
+
+**The Solution:**
+
+Claude Code supports `CLAUDE_CODE_OAUTH_TOKEN` for headless/automated authentication. Users must:
+
+1. **Generate a long-lived OAuth token** (one-time setup):
+   ```bash
+   claude setup-token
+   ```
+   This opens a browser for OAuth flow and outputs a token.
+
+2. **Set the environment variable** before starting Chorus:
+   ```bash
+   export CLAUDE_CODE_OAUTH_TOKEN="<token-from-step-1>"
+   ```
+
+3. **Chorus passes the token** to spawned Claude sessions:
+   ```python
+   # services/tmux.py - start_claude()
+   env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+   oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+   if oauth_token:
+       env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
+   ```
+
+**Additional Requirements:**
+
+The isolated config's `.claude.json` must have `hasCompletedOnboarding: true` to skip the interactive onboarding flow. Chorus ensures this by copying the user's `~/.claude.json` (which has this flag set after initial login).
+
+See: [GitHub Issue #8938](https://github.com/anthropics/claude-code/issues/8938)
+
+**Credential Refresh:**
+
+Credentials are refreshed from `~/.claude.json` every time `ensure_hooks()` is called (when starting tasks). This ensures spawned sessions pick up any authentication changes (e.g., after re-login).
+
+```python
+# services/hooks.py - ensure_hooks_config()
+# Always refresh credentials, even if config already exists
+global_creds = Path.home() / ".claude.json"
+if global_creds.exists():
+    shutil.copy2(global_creds, config_dir / ".claude.json")
+```
+
 ---
 
 ## Dashboard Implementation
@@ -944,7 +998,10 @@ PROJECT_ROOT=/path/to/your/project    # Required
 EDITOR=nvim                           # Optional
 PORT=8000                             # Optional
 POLL_INTERVAL=1.0                     # Status polling interval
+CLAUDE_CODE_OAUTH_TOKEN=<token>       # Required for spawned session auth (see below)
 ```
+
+**CLAUDE_CODE_OAUTH_TOKEN** — Required for spawned Claude sessions to authenticate without interactive login. Generate with `claude setup-token`. See [Spawned Session Authentication](#spawned-session-authentication) for details.
 
 ---
 
