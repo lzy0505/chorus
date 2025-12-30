@@ -320,7 +320,7 @@ async def restart_claude(
     context_file = get_context_file(task_id)
 
     # Send a kickoff message to get Claude working after restart
-    kickoff_message = "Please continue working on this task."
+    kickoff_message = "Continue to complete the HIGHEST PRIORITY task."
 
     try:
         tmux.restart_claude(task_id, context_file=context_file, initial_prompt=kickoff_message)

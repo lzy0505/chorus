@@ -328,7 +328,7 @@ class TestTaskRestartClaude:
         mock_tmux.restart_claude.assert_called_once_with(
             task_id,
             context_file=Path(f"/tmp/chorus/task-{task_id}/context.md"),
-            initial_prompt="Please continue working on this task."
+            initial_prompt="Continue to complete the HIGHEST PRIORITY task."
         )
 
         with Session(engine) as db:
