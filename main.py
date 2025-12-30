@@ -1,6 +1,7 @@
 """Entry point for Chorus - Task-centric Claude orchestration."""
 
 import argparse
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,10 +16,33 @@ from config import load_config, set_config, get_config
 from database import create_db_and_tables
 
 
+def _ensure_config():
+    """Ensure config is loaded, using environment variables if needed.
+
+    This is needed because uvicorn with reload=True spawns a new process
+    that reimports the module without running main().
+    """
+    try:
+        get_config()
+    except RuntimeError:
+        # Config not set - load from environment variables
+        config_path = os.environ.get("CHORUS_CONFIG_PATH")
+        project_path = os.environ.get("CHORUS_PROJECT_PATH")
+        if config_path and project_path:
+            config = load_config(config_path, project_root=project_path)
+            set_config(config)
+        else:
+            raise RuntimeError(
+                "Configuration not initialized and CHORUS_CONFIG_PATH / "
+                "CHORUS_PROJECT_PATH environment variables not set."
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
+    _ensure_config()
     create_db_and_tables()
     yield
     # Shutdown
@@ -100,6 +124,10 @@ def main() -> None:
 
     config = load_config(args.config, project_root=args.project)
     set_config(config)
+
+    # Set environment variables for uvicorn reload subprocess
+    os.environ["CHORUS_CONFIG_PATH"] = str(args.config.resolve())
+    os.environ["CHORUS_PROJECT_PATH"] = str(args.project)
 
     uvicorn.run(
         "main:app",
