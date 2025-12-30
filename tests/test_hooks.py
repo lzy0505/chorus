@@ -129,20 +129,39 @@ class TestGenerateHooksConfig:
         """Test the structure of each hook entry."""
         config = generate_hooks_config(task_id=1, chorus_url="http://localhost:8000")
 
+        # No-matcher events use simple format
+        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
+        # Matcher events use nested format with "hooks" array
+        matcher_events = ["PermissionRequest", "PostToolUse"]
+
         for hook_name, hook_list in config["hooks"].items():
             assert isinstance(hook_list, list)
             assert len(hook_list) == 1
 
             hook = hook_list[0]
-            assert hook["type"] == "command"
-            assert "command" in hook
+            if hook_name in no_matcher_events:
+                # Simple format: {"type": "command", "command": "..."}
+                assert hook["type"] == "command"
+                assert "command" in hook
+            else:
+                # Nested format: {"matcher": "*", "hooks": [...]}
+                assert "matcher" in hook
+                assert "hooks" in hook
+                assert hook["hooks"][0]["type"] == "command"
+                assert "command" in hook["hooks"][0]
 
     def test_command_contains_url(self):
         """Test that hook commands contain the Chorus URL."""
         config = generate_hooks_config(task_id=42, chorus_url="http://test:9000")
 
-        for hook_list in config["hooks"].values():
-            command = hook_list[0]["command"]
+        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
+
+        for hook_name, hook_list in config["hooks"].items():
+            hook = hook_list[0]
+            if hook_name in no_matcher_events:
+                command = hook["command"]
+            else:
+                command = hook["hooks"][0]["command"]
             assert "http://test:9000" in command
 
     def test_command_posts_to_correct_endpoint(self):
@@ -165,8 +184,14 @@ class TestGenerateHooksConfigWithHandler:
             chorus_url="http://localhost:8000",
         )
 
-        for hook_list in config["hooks"].values():
-            command = hook_list[0]["command"]
+        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
+
+        for hook_name, hook_list in config["hooks"].items():
+            hook = hook_list[0]
+            if hook_name in no_matcher_events:
+                command = hook["command"]
+            else:
+                command = hook["hooks"][0]["command"]
             assert "/path/to/handler.py" in command
 
     def test_sets_environment_variables(self):

@@ -75,20 +75,16 @@ def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dic
         f"r.urlopen(r.Request('{url}/api/hooks/' + d['hook_event_name'].lower(), " \
         "json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
 
-    # Events that don't need a matcher
+    # Events that don't need a matcher - use simple format
     no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools)
+    # Events that need a matcher (use "*" for all tools) - use nested format
     matcher_events = ["PermissionRequest", "PostToolUse"]
 
     hooks_config: dict = {"hooks": {}}
 
     for event in no_matcher_events:
         hooks_config["hooks"][event] = [
-            {
-                "hooks": [
-                    {"type": "command", "command": handler_script}
-                ]
-            }
+            {"type": "command", "command": handler_script}
         ]
 
     for event in matcher_events:
@@ -127,16 +123,16 @@ def generate_hooks_config_with_handler(
     # Handler script receives JSON via stdin, task_id and url as env vars
     command = f"CHORUS_URL={url} CHORUS_TASK_ID={task_id} python {handler_path}"
 
-    # Events that don't need a matcher
+    # Events that don't need a matcher - use simple format
     no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools)
+    # Events that need a matcher (use "*" for all tools) - use nested format
     matcher_events = ["PermissionRequest", "PostToolUse"]
 
     hooks_config: dict = {"hooks": {}}
 
     for event in no_matcher_events:
         hooks_config["hooks"][event] = [
-            {"hooks": [{"type": "command", "command": command}]}
+            {"type": "command", "command": command}
         ]
 
     for event in matcher_events:
