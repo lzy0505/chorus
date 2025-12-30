@@ -772,30 +772,52 @@ Instead of polling terminal output, we use Claude Code's native hooks system for
 | `Notification` (idle_prompt) | Idle 60+ seconds | confirms `idle` |
 | `SessionEnd` | Claude exits | → `stopped` |
 
-**Shared Hook Configuration:**
+**Isolated Config with Global Inheritance:**
 
-All Claude sessions share a single hook configuration stored in `/tmp/chorus/hooks/.claude/settings.json`. This keeps hooks isolated from the hosted project while avoiding per-task duplication. The config is task-agnostic — the API uses `session_id` from hook payloads to find the associated task.
+All Claude sessions share a configuration stored in `/tmp/chorus/hooks/.claude/`. This config is created by:
+
+1. **Copying** all files from `~/.claude/` (credentials, settings, projects, etc.)
+2. **Merging** Chorus-specific hooks into `settings.json`
+
+This approach ensures spawned Claude sessions have:
+- **Login credentials** — No re-authentication needed
+- **User's global settings** — Permissions, model preferences, allowed tools
+- **Chorus hooks** — Task tracking, auto-commits, status updates
+
+All without polluting the user's global `~/.claude/` config.
+
+```python
+# services/hooks.py - ensure_hooks_config()
+def ensure_hooks_config(chorus_url=None, force=False):
+    config_dir = Path("/tmp/chorus/hooks/.claude")
+
+    # Copy entire global config (credentials, settings, etc.)
+    global_config_dir = Path.home() / ".claude"
+    if global_config_dir.exists():
+        shutil.copytree(global_config_dir, config_dir, dirs_exist_ok=True)
+
+    # Merge Chorus hooks into settings.json
+    base_config = load_existing_settings()
+    chorus_hooks = generate_hooks_config(chorus_url)
+    merged = deep_merge_hooks(base_config, chorus_hooks)
+    write_settings(merged)
+```
+
+**Chorus Hooks Added:**
 
 ```json
 {
   "hooks": {
-    "Stop": [{
-      "type": "command",
-      "command": "python -c \"import sys,json,urllib.request as r; d=json.loads(sys.stdin.read()); r.urlopen(r.Request('http://localhost:8000/api/hooks/' + d['hook_event_name'].lower(), json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
-    }],
-    "PermissionRequest": [{
-      "matcher": "*",
-      "hooks": [{ "type": "command", "command": "..." }]
-    }],
+    "Stop": [{ "type": "command", "command": "curl POST /api/hooks/stop ..." }],
+    "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "..." }] }],
     "SessionStart": [{ "type": "command", "command": "..." }],
     "SessionEnd": [{ "type": "command", "command": "..." }],
-    "PostToolUse": [{
-      "matcher": "*",
-      "hooks": [{ "type": "command", "command": "..." }]
-    }]
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "..." }] }]
   }
 }
 ```
+
+The config is task-agnostic — the API uses `session_id` from hook payloads to find the associated task. User's existing hooks are preserved; Chorus hooks are appended.
 
 Claude is launched with `CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude"` to use this shared configuration instead of the project's `.claude/` directory.
 
