@@ -1,17 +1,33 @@
 /* Chorus - Task-centric Claude orchestration */
 
 :root {
-    --bg-primary: #1a1a2e;
-    --bg-secondary: #16213e;
-    --bg-tertiary: #0f3460;
-    --text-primary: #eaeaea;
-    --text-secondary: #a0a0a0;
-    --accent-blue: #4a90d9;
+    /* Dark theme (night mode) - dark green/blackish */
+    --bg-primary: #0a0f0a;
+    --bg-secondary: #141f14;
+    --bg-tertiary: #1a2e1a;
+    --text-primary: #e8f5e8;
+    --text-secondary: #9db89d;
+    --accent-blue: #4a8f5c;
     --accent-green: #4caf50;
-    --accent-yellow: #ffc107;
-    --accent-red: #f44336;
-    --accent-purple: #9c27b0;
-    --border-color: #2a2a4a;
+    --accent-yellow: #c9b852;
+    --accent-red: #d44336;
+    --accent-purple: #7c5f8c;
+    --border-color: #2a3f2a;
+}
+
+/* Light theme (day mode) - light yellowish */
+:root[data-theme="light"] {
+    --bg-primary: #fffef0;
+    --bg-secondary: #fef9e1;
+    --bg-tertiary: #f5f0d4;
+    --text-primary: #2a2a1a;
+    --text-secondary: #6a6a4a;
+    --accent-blue: #5a7f6a;
+    --accent-green: #4a8f50;
+    --accent-yellow: #d4a942;
+    --accent-red: #c44336;
+    --accent-purple: #8c6f9c;
+    --border-color: #d4cfaa;
 }
 
 * {
@@ -40,6 +56,10 @@ header {
     padding: 1rem;
     border-bottom: 1px solid var(--border-color);
     margin-bottom: 1rem;
+}
+
+header .theme-toggle {
+    margin-left: auto;
 }
 
 h1 {
@@ -412,6 +432,37 @@ h1 {
 
 .error {
     color: var(--accent-red);
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: relative;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.theme-toggle:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-blue);
+}
+
+.theme-toggle::before {
+    content: '🌙';
+    font-size: 1rem;
+}
+
+:root[data-theme="light"] .theme-toggle::before {
+    content: '☀️';
 }
 
 /* Responsive */
