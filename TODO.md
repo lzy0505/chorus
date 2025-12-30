@@ -19,6 +19,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Inherit global Claude config (~/.claude/) for spawned sessions (2025-12-30)
 - [x] Optimize Claude hooks to use shared project-level config (2025-12-30)
 - [x] Implement minimal web dashboard with htmx + SSE (2025-12-29)
 - [x] Implement `api/tasks.py` with full CRUD and lifecycle endpoints (2025-12-29)

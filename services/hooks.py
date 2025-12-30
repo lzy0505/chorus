@@ -10,20 +10,84 @@ Hook events used:
 - PermissionRequest: Permission dialog shown → waiting status
 - SessionEnd: Claude exits → stopped status
 
-Isolation:
+Isolation with Global Config Inheritance:
 Hooks are written to /tmp/chorus/hooks/.claude/ to avoid polluting
-the hosted project's working directory. All Claude sessions share the
-same hooks config since it contains no task-specific data. Claude Code
-is launched with CLAUDE_CONFIG_DIR pointing to this shared location.
+the hosted project's working directory. The isolated config is created by:
+1. Copying all files from ~/.claude/ (credentials, settings, projects, etc.)
+2. Deep merging Chorus-specific hooks into settings.json
+
+This ensures each tmux session has access to:
+- Login credentials (no re-authentication needed for spawned sessions)
+- User's global settings (permissions, model preferences, allowed tools)
+- Chorus-specific hooks for task tracking
+
+All without polluting the global config. Claude Code is launched with
+CLAUDE_CONFIG_DIR pointing to this shared location.
 """
 
 import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from config import get_config
+
+
+def get_global_config_dir() -> Path:
+    """Get the path to the global Claude config directory.
+
+    Returns:
+        Path to ~/.claude/
+    """
+    return Path.home() / ".claude"
+
+
+def get_global_config_path() -> Path:
+    """Get the path to the global Claude config.
+
+    Returns:
+        Path to ~/.claude/settings.json
+    """
+    return get_global_config_dir() / "settings.json"
+
+
+def deep_merge_hooks(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two hook configurations.
+
+    Merges the overlay config into the base config, preserving both.
+    For hooks arrays, the overlay hooks are appended to existing ones.
+
+    Args:
+        base: The base configuration (e.g., from global config).
+        overlay: The overlay configuration (e.g., Chorus hooks).
+
+    Returns:
+        Merged configuration with all settings from both.
+    """
+    result = base.copy()
+
+    for key, value in overlay.items():
+        if key not in result:
+            result[key] = value
+        elif key == "hooks" and isinstance(value, dict) and isinstance(result[key], dict):
+            # Merge hooks specially - append to existing hook arrays
+            merged_hooks = result[key].copy()
+            for event, hooks_list in value.items():
+                if event in merged_hooks:
+                    # Append new hooks to existing event hooks
+                    merged_hooks[event] = merged_hooks[event] + hooks_list
+                else:
+                    merged_hooks[event] = hooks_list
+            result[key] = merged_hooks
+        elif isinstance(value, dict) and isinstance(result.get(key), dict):
+            # Recursively merge nested dicts
+            result[key] = deep_merge_hooks(result[key], value)
+        else:
+            # Overlay value takes precedence for non-dict values
+            result[key] = value
+
+    return result
 
 
 def get_hooks_config_dir() -> Path:
@@ -158,27 +222,59 @@ def generate_hooks_config_with_handler(
     return hooks_config
 
 
-def ensure_hooks_config(chorus_url: Optional[str] = None) -> Path:
+def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -> Path:
     """Ensure hooks configuration exists in the shared config directory.
 
-    Creates .claude/settings.json in /tmp/chorus/hooks/ if it doesn't exist.
-    Since all sessions share the same config, this is idempotent.
+    Creates /tmp/chorus/hooks/.claude/ by:
+    1. Copying all files from ~/.claude/ (credentials, settings, etc.)
+    2. Merging Chorus-specific hooks into settings.json
+
+    This ensures tmux sessions have access to:
+    - Login credentials (no re-authentication needed)
+    - User's global settings (permissions, model preferences, allowed tools)
+    - Chorus-specific hooks for task tracking
+
+    All without polluting the global config.
 
     Args:
         chorus_url: Override the Chorus API URL (for testing).
+        force: Force regeneration even if config exists.
 
     Returns:
         Path to the config directory (for CLAUDE_CONFIG_DIR).
     """
     config_dir = get_hooks_config_dir()
-    config_dir.mkdir(parents=True, exist_ok=True)
-
     settings_path = config_dir / "settings.json"
 
-    # Only write if it doesn't exist (idempotent)
-    if not settings_path.exists():
-        hooks_config = generate_hooks_config(chorus_url)
-        settings_path.write_text(json.dumps(hooks_config, indent=2))
+    # Check if we need to regenerate
+    if settings_path.exists() and not force:
+        return config_dir
+
+    # Remove existing config dir if forcing regeneration
+    if config_dir.exists() and force:
+        shutil.rmtree(config_dir)
+
+    # Copy entire global config directory if it exists (includes credentials)
+    global_config_dir = get_global_config_dir()
+    if global_config_dir.exists():
+        shutil.copytree(global_config_dir, config_dir, dirs_exist_ok=True)
+    else:
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load existing settings (from copied global config) or start fresh
+    if settings_path.exists():
+        try:
+            base_config = json.loads(settings_path.read_text())
+        except (json.JSONDecodeError, IOError):
+            base_config = {}
+    else:
+        base_config = {}
+
+    # Generate and merge Chorus hooks
+    chorus_hooks = generate_hooks_config(chorus_url)
+    merged_config = deep_merge_hooks(base_config, chorus_hooks)
+
+    settings_path.write_text(json.dumps(merged_config, indent=2))
 
     return config_dir
 
@@ -200,11 +296,14 @@ class HooksService:
 
     Handles:
     - Generating hooks configuration
-    - Ensuring hooks settings exist in shared directory
+    - Ensuring hooks settings exist in shared directory (copied from global + merged)
     - Parsing hook payloads
 
     Hooks are written to /tmp/chorus/hooks/.claude/ - a shared location
-    for all Claude sessions, avoiding pollution of the hosted project.
+    for all Claude sessions. The config is created by copying all files from
+    ~/.claude/ (including credentials) and merging Chorus hooks into settings.json.
+    This keeps the global config clean while providing full functionality and
+    eliminating the need for re-authentication in spawned sessions.
     """
 
     def __init__(self, chorus_url: Optional[str] = None):
@@ -215,15 +314,20 @@ class HooksService:
         """
         self.chorus_url = chorus_url
 
-    def ensure_hooks(self) -> Path:
+    def ensure_hooks(self, force: bool = False) -> Path:
         """Ensure hooks configuration exists in the shared directory.
 
+        Merges the user's global Claude config with Chorus hooks.
         This is idempotent - safe to call multiple times.
+
+        Args:
+            force: Force regeneration even if config exists (useful if
+                   global config changed).
 
         Returns:
             Path to the config directory (for CLAUDE_CONFIG_DIR).
         """
-        return ensure_hooks_config(self.chorus_url)
+        return ensure_hooks_config(self.chorus_url, force=force)
 
     def get_config_dir(self) -> Path:
         """Get the shared config directory path.
