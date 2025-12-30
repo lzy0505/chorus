@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-30 17:17
+> Auto-updated by Claude Code. Last update: 2025-12-30 20:36
 
 ## In Progress
 
@@ -14,6 +14,7 @@
 - [x] Error handling (2025-12-30)
 - [x] Edge cases (2025-12-30)
 - [x] Move polling configuration to TOML (2025-12-30)
+- [x] Comprehensive logging for debugging external tools (2025-12-30)
 - [ ] Desktop notifications
 - [ ] Integration tests with tmux
 

@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from config import get_config
+from services.logging_utils import get_logger, log_subprocess_call
+
+logger = get_logger(__name__)
 
 
 class TtydError(Exception):
@@ -116,6 +119,8 @@ class TtydService:
 
         port = self.get_port(task_id)
 
+        logger.info(f"Starting ttyd for task {task_id} on port {port} (session: {session_id})")
+
         # Build ttyd command
         # -W: writable (allow input)
         # -p: port
@@ -130,6 +135,7 @@ class TtydService:
         ]
 
         try:
+            log_subprocess_call(logger, cmd)
             # Start ttyd in background
             process = subprocess.Popen(
                 cmd,
@@ -141,6 +147,8 @@ class TtydService:
             # Store process info
             _running_processes[task_id] = (process.pid, port)
 
+            logger.info(f"Started ttyd for task {task_id}: PID {process.pid}, URL {self.get_url(task_id)}")
+
             return TtydInfo(
                 task_id=task_id,
                 port=port,
@@ -149,8 +157,10 @@ class TtydService:
             )
 
         except FileNotFoundError:
+            logger.error("ttyd not found. Install with: brew install ttyd")
             raise TtydError("ttyd not found. Install with: brew install ttyd")
         except Exception as e:
+            logger.error(f"Failed to start ttyd for task {task_id}: {e}", exc_info=e)
             raise TtydError(f"Failed to start ttyd: {e}")
 
     def stop(self, task_id: int) -> None:
@@ -167,14 +177,18 @@ class TtydService:
 
         pid, port = _running_processes[task_id]
 
+        logger.info(f"Stopping ttyd for task {task_id}: PID {pid}, port {port}")
+
         try:
             # Send SIGTERM to gracefully stop
             os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass  # Process already gone
+            logger.debug(f"Sent SIGTERM to ttyd process {pid}")
+        except OSError as e:
+            logger.warning(f"Failed to kill ttyd process {pid}: {e}")
 
         # Remove from tracking
         del _running_processes[task_id]
+        logger.info(f"Stopped ttyd for task {task_id}")
 
     def stop_if_running(self, task_id: int) -> bool:
         """Stop ttyd if it's running for a task.
@@ -234,8 +248,10 @@ class TtydService:
         Returns:
             Number of instances stopped.
         """
+        logger.info(f"Cleaning up all ttyd instances ({len(_running_processes)} running)")
         count = 0
         for task_id in list(_running_processes.keys()):
             if self.stop_if_running(task_id):
                 count += 1
+        logger.info(f"Cleaned up {count} ttyd instances")
         return count

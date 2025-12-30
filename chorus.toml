@@ -49,3 +49,8 @@ frozen_threshold = 300.0 # Warn if Claude busy > 5 minutes
 
 [notifications]
 enabled = true
+
+[logging]
+level = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_subprocess = true  # Log external tool invocations (tmux, GitButler CLI, ttyd)
+log_api_requests = true  # Log API endpoint calls

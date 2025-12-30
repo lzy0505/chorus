@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from config import get_config
+from services.logging_utils import get_logger, log_subprocess_call
+
+logger = get_logger(__name__)
 
 
 class GitButlerError(Exception):
@@ -95,13 +98,21 @@ def _run_but(
     if cwd is None:
         config = get_config()
         cwd = str(config.project_root)
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=check,
-        cwd=cwd,
-    )
+
+    log_subprocess_call(logger, cmd)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=check,
+            cwd=cwd,
+        )
+        log_subprocess_call(logger, cmd, result=result)
+        return result
+    except Exception as e:
+        log_subprocess_call(logger, cmd, error=e)
+        raise
 
 
 def _parse_change(data: dict) -> Change:
@@ -192,6 +203,7 @@ class GitButlerService:
         Raises:
             GitButlerError: If the command fails.
         """
+        logger.debug("Getting GitButler workspace status")
         result = _run_but(["status", "-j"], check=False, cwd=self.project_root)
 
         if result.returncode != 0:
@@ -251,6 +263,7 @@ class GitButlerService:
         if self.stack_exists(name):
             raise StackExistsError(f"Stack '{name}' already exists")
 
+        logger.info(f"Creating GitButler stack: {name}")
         result = _run_but(
             ["branch", "new", name, "-j"], check=False, cwd=self.project_root
         )
@@ -263,6 +276,7 @@ class GitButlerService:
         status = self.get_status()
         for stack in status.stacks:
             if stack.name == name:
+                logger.info(f"Created GitButler stack: {name}")
                 return stack
         raise GitButlerError(f"Stack '{name}' created but not found in status")
 
@@ -280,6 +294,7 @@ class GitButlerService:
         if not self.stack_exists(name):
             raise StackNotFoundError(f"Stack '{name}' not found")
 
+        logger.info(f"Deleting GitButler stack: {name} (force={force})")
         args = ["branch", "delete", name]
         if force:
             args.append("--force")
@@ -288,6 +303,8 @@ class GitButlerService:
 
         if result.returncode != 0:
             raise GitButlerError(f"Failed to delete stack: {result.stderr}")
+
+        logger.info(f"Deleted GitButler stack: {name}")
 
     def commit_to_stack(
         self,
@@ -312,11 +329,13 @@ class GitButlerService:
         # Check if stack exists
         if not self.stack_exists(stack_name):
             if create_if_missing:
+                logger.info(f"Stack '{stack_name}' doesn't exist, creating it")
                 self.create_stack(stack_name)
             else:
                 raise StackNotFoundError(f"Stack '{stack_name}' not found")
 
         # Build commit command
+        logger.info(f"Committing to GitButler stack: {stack_name}" + (f" with message: {message}" if message else ""))
         args = ["commit", stack_name, "-j"]
         if message:
             args.extend(["-m", message])
@@ -327,6 +346,7 @@ class GitButlerService:
         if result.returncode != 0:
             stderr = result.stderr.lower()
             if "nothing to commit" in stderr or "no changes" in stderr:
+                logger.debug(f"No changes to commit to stack: {stack_name}")
                 return None
             raise CommitError(f"Failed to commit: {result.stderr}")
 
@@ -343,7 +363,10 @@ class GitButlerService:
 
         # Command succeeded - fetch latest commit from stack
         commits = self.get_stack_commits(stack_name)
-        return commits[0] if commits else None
+        commit = commits[0] if commits else None
+        if commit:
+            logger.info(f"Created commit in stack '{stack_name}': {commit.commit_id[:8]}")
+        return commit
 
     def get_stack_commits(self, stack_name: str) -> list[Commit]:
         """Get commits in a stack.

@@ -22,8 +22,9 @@ from services.error_handler import (
     UnrecoverableError,
     log_service_error,
 )
+from services.logging_utils import configure_logging
 
-# Configure logging
+# Initial basic logging setup (will be reconfigured after config load)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -58,11 +59,16 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     _ensure_config()
+
+    # Configure logging from config
+    config = get_config()
+    configure_logging(level=config.logging.level, format_str=config.logging.format)
+    logger.info("Chorus starting up...")
+
     create_db_and_tables()
 
     # Start status poller in hybrid mode (if enabled)
     # Hooks provide fast updates, poller acts as safety net
-    config = get_config()
     if config.status_polling.enabled:
         from services.status_poller import get_status_poller
         poller = get_status_poller(
@@ -78,11 +84,12 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    logger.info("Chorus shutting down...")
     if poller is not None:
         await poller.stop()
         stats = poller.get_stats()
         logger.info(f"Status poller stopped. Corrections made: {stats['correction_count']}")
-    pass
+    logger.info("Chorus shutdown complete")
 
 
 app = FastAPI(
@@ -216,9 +223,16 @@ def main() -> None:
     config = load_config(args.config, project_root=args.project)
     set_config(config)
 
+    # Configure logging early
+    configure_logging(level=config.logging.level, format_str=config.logging.format)
+
     # Set environment variables for uvicorn reload subprocess
     os.environ["CHORUS_CONFIG_PATH"] = str(args.config.resolve())
     os.environ["CHORUS_PROJECT_PATH"] = str(args.project)
+
+    logger.info(f"Starting Chorus server on {config.server.host}:{config.server.port}")
+    logger.info(f"Project root: {config.project_root}")
+    logger.info(f"Logging level: {config.logging.level}")
 
     uvicorn.run(
         "main:app",

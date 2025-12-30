@@ -13,6 +13,9 @@ from typing import Optional
 
 from config import get_config
 from services.hooks import get_hooks_config_dir
+from services.logging_utils import get_logger, log_subprocess_call
+
+logger = get_logger(__name__)
 
 
 class TmuxError(Exception):
@@ -52,7 +55,14 @@ def _session_id_for_task(task_id: int) -> str:
 def _run_tmux(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
     """Run a tmux command."""
     cmd = ["tmux"] + args
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    log_subprocess_call(logger, cmd)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=check)
+        log_subprocess_call(logger, cmd, result=result)
+        return result
+    except Exception as e:
+        log_subprocess_call(logger, cmd, error=e)
+        raise
 
 
 def session_exists(session_id: str) -> bool:
@@ -109,6 +119,8 @@ class TmuxService:
         if session_exists(session_id):
             raise SessionExistsError(f"Session {session_id} already exists")
 
+        logger.info(f"Creating tmux session for task {task_id}: {session_id}")
+
         # Create detached tmux session with shell (not Claude yet)
         _run_tmux(
             [
@@ -121,6 +133,7 @@ class TmuxService:
             ]
         )
 
+        logger.info(f"Created tmux session: {session_id}")
         return session_id
 
     def start_claude(
@@ -147,6 +160,8 @@ class TmuxService:
         if not session_exists(session_id):
             raise SessionNotFoundError(f"Session {session_id} not found")
 
+        logger.info(f"Starting Claude Code for task {task_id} in session {session_id}")
+
         # Get shared config directory for hooks
         # This keeps hooks out of the hosted project's .claude/ directory
         config_dir = get_hooks_config_dir()
@@ -165,6 +180,7 @@ class TmuxService:
             # Use --append-system-prompt to inject task context
             # The context becomes part of Claude's system prompt for the entire session
             claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})"'
+            logger.debug(f"Starting Claude with context file: {context_file}")
         else:
             claude_cmd = f"{env_prefix} claude"
 
@@ -174,9 +190,11 @@ class TmuxService:
             # Escape the prompt for shell
             escaped_prompt = initial_prompt.replace('"', '\\"')
             claude_cmd += f' "{escaped_prompt}"'
+            logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
+        logger.info(f"Claude Code started for task {task_id}")
 
     def restart_claude(
         self,
@@ -201,6 +219,8 @@ class TmuxService:
 
         if not session_exists(session_id):
             raise SessionNotFoundError(f"Session {session_id} not found")
+
+        logger.info(f"Restarting Claude Code for task {task_id}")
 
         # Send Ctrl-C to interrupt any running process
         _run_tmux(["send-keys", "-t", session_id, "C-c"])
@@ -236,6 +256,7 @@ class TmuxService:
 
         # Start Claude again
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
+        logger.info(f"Claude Code restarted for task {task_id}")
 
     def kill_task_session(self, task_id: int) -> None:
         """Kill the tmux session for a task.
@@ -251,7 +272,9 @@ class TmuxService:
         if not session_exists(session_id):
             raise SessionNotFoundError(f"Session {session_id} not found")
 
+        logger.info(f"Killing tmux session for task {task_id}: {session_id}")
         _run_tmux(["kill-session", "-t", session_id])
+        logger.info(f"Killed tmux session: {session_id}")
 
     def capture_output(self, task_id: int, lines: int = 100) -> str:
         """Capture terminal output from the task's tmux session.

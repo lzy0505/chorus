@@ -94,6 +94,11 @@ patterns = [
     ".claude/**/*.md",
 ]
 
+[logging]
+level = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_subprocess = true  # Log external tool invocations (tmux, GitButler CLI)
+log_api_requests = true  # Log API endpoint calls
+
 [status.idle]
 patterns = ['>\\s*$', 'claude>\\s*$']
 
@@ -102,6 +107,16 @@ patterns = ['\\(y/n\\)', 'Allow\\?', 'Continue\\?']
 ```
 
 Each Chorus instance manages a single project. tmux sessions use environment variables as needed for Claude Code.
+
+### Logging
+
+Chorus provides comprehensive logging for debugging, particularly for external tool interactions:
+
+- **Log Levels**: Set via `logging.level` (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- **Subprocess Logging**: When enabled (`log_subprocess = true`), logs all tmux, GitButler CLI, and ttyd commands with their exit codes, stdout, and stderr
+- **API Request Logging**: When enabled (`log_api_requests = true`), logs all HTTP requests with status codes
+
+For debugging external tool issues, set `level = "DEBUG"` to see detailed command execution information.
 
 ## Development
 
