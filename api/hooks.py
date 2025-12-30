@@ -134,33 +134,42 @@ async def hook_stop(
 
     Claude finished responding - set status to idle.
     """
-    task = find_task_by_session_id(db, payload.session_id)
+    try:
+        task = find_task_by_session_id(db, payload.session_id)
 
-    if not task:
+        if not task:
+            return HookResponse(
+                status="ignored",
+                message=f"No task found for session {payload.session_id}",
+            )
+
+        # Update status to idle (finished responding)
+        task.claude_status = ClaudeStatus.idle
+
+        # If task was waiting for permission and we got a stop, reset to running
+        if task.status == TaskStatus.waiting:
+            task.status = TaskStatus.running
+            task.permission_prompt = None
+
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        # TODO: Emit SSE event for claude_status change
+
         return HookResponse(
-            status="ignored",
-            message=f"No task found for session {payload.session_id}",
+            status="ok",
+            task_id=task.id,
+            message=f"Task {task.id} Claude status set to idle",
         )
-
-    # Update status to idle (finished responding)
-    task.claude_status = ClaudeStatus.idle
-
-    # If task was waiting for permission and we got a stop, reset to running
-    if task.status == TaskStatus.waiting:
-        task.status = TaskStatus.running
-        task.permission_prompt = None
-
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-
-    # TODO: Emit SSE event for claude_status change
-
-    return HookResponse(
-        status="ok",
-        task_id=task.id,
-        message=f"Task {task.id} Claude status set to idle",
-    )
+    except Exception as e:
+        # Log but don't fail - hooks should be resilient
+        logger = __import__("logging").getLogger(__name__)
+        logger.error(f"Error in Stop hook: {e}", exc_info=True)
+        return HookResponse(
+            status="error",
+            message=f"Hook processing failed: {str(e)}",
+        )
 
 
 @router.post("/permissionrequest", response_model=HookResponse)

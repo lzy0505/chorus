@@ -140,8 +140,8 @@ class TestStatusPoller:
         mock_detector.detect_status.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_poll_once_skips_when_detector_returns_none(self, engine, mock_detector):
-        """Test that poll_once skips when detector can't detect status."""
+    async def test_poll_once_marks_stopped_when_session_not_found(self, engine, mock_detector):
+        """Test that poll_once marks Claude as stopped when session doesn't exist."""
         with Session(engine) as db:
             task = Task(
                 title="Test",
@@ -162,11 +162,12 @@ class TestStatusPoller:
 
         await poller._poll_once()
 
-        # Verify status wasn't changed
+        # Verify status was marked as stopped and session cleared
         with Session(engine) as db:
             task = db.get(Task, task_id)
-            assert task.claude_status == ClaudeStatus.idle
-            assert poller._correction_count == 0
+            assert task.claude_status == ClaudeStatus.stopped
+            assert task.claude_session_id is None
+            assert poller._orphan_cleanups == 1
 
     @pytest.mark.asyncio
     async def test_poll_once_handles_errors_gracefully(self, engine, mock_detector):

@@ -31,9 +31,18 @@ class StatusPoller:
 
     This provides a safety net for hook-based status updates, catching cases
     where hooks might be missed or delayed.
+
+    Corner case handling:
+    - Detects killed/crashed tmux sessions → marks as stopped
+    - Detects frozen Claude (busy > timeout) → logs warning
+    - Handles database errors gracefully
+    - Cleans up orphaned session mappings
     """
 
-    def __init__(self, interval: float = 5.0, engine=None):
+    # How long Claude can be busy before we consider it potentially frozen
+    FROZEN_THRESHOLD_SECONDS = 300  # 5 minutes
+
+    def __init__(self, interval: float = 5.0, engine=None, frozen_threshold: float = 300.0):
         """Initialize the status poller.
 
         Args:
@@ -41,13 +50,18 @@ class StatusPoller:
                      Longer intervals are appropriate for hybrid mode where
                      hooks provide fast updates and polling is a safety net.
             engine: Optional database engine (for testing)
+            frozen_threshold: Seconds before considering Claude frozen (default: 300)
         """
         self.interval = interval
         self.detector = StatusDetector()
         self.engine = engine  # If None, will use get_engine()
+        self.frozen_threshold = frozen_threshold
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._correction_count = 0  # Track how often poller corrects hook status
+        self._frozen_warnings = 0  # Track frozen detections
+        self._orphan_cleanups = 0  # Track orphaned session cleanups
+        self._last_busy_check: dict[int, datetime] = {}  # Track when tasks became busy
 
     async def _poll_once(self) -> None:
         """Poll status for all running tasks once."""
@@ -68,9 +82,42 @@ class StatusPoller:
                     # Detect actual status from terminal
                     detected_status = self.detector.detect_status(task.id)
 
-                    # Skip if couldn't detect (session might be gone)
+                    # Handle tmux session killed/crashed
                     if detected_status is None:
+                        # Session doesn't exist anymore - mark as stopped
+                        if task.claude_status != ClaudeStatus.stopped:
+                            self._orphan_cleanups += 1
+                            logger.warning(
+                                f"Task {task.id}: Tmux session '{task.tmux_session}' "
+                                f"not found - marking Claude as stopped "
+                                f"(cleanup #{self._orphan_cleanups})"
+                            )
+                            task.claude_status = ClaudeStatus.stopped
+                            task.claude_session_id = None  # Clear session mapping
+                            db.add(task)
                         continue
+
+                    # Track when tasks become busy for frozen detection
+                    now = datetime.now(timezone.utc)
+                    if detected_status == ClaudeStatus.busy:
+                        if task.id not in self._last_busy_check:
+                            # Task just became busy
+                            self._last_busy_check[task.id] = now
+                        else:
+                            # Task has been busy - check if frozen
+                            busy_duration = (now - self._last_busy_check[task.id]).total_seconds()
+                            if busy_duration > self.frozen_threshold:
+                                self._frozen_warnings += 1
+                                logger.error(
+                                    f"Task {task.id}: Claude appears frozen! "
+                                    f"Busy for {busy_duration:.0f}s (threshold: {self.frozen_threshold}s) "
+                                    f"(frozen warning #{self._frozen_warnings})"
+                                )
+                                # Note: We don't change status automatically - just warn
+                                # The user may need to manually restart Claude
+                    else:
+                        # Task is not busy - clear tracking
+                        self._last_busy_check.pop(task.id, None)
 
                     # Update if status changed (poller correcting hook-based status)
                     if detected_status != task.claude_status:
@@ -148,12 +195,15 @@ class StatusPoller:
         """Get polling statistics.
 
         Returns:
-            Dict with polling stats (corrections, running state, etc.)
+            Dict with polling stats (corrections, frozen warnings, cleanups, etc.)
         """
         return {
             "running": self._running,
             "interval": self.interval,
             "correction_count": self._correction_count,
+            "frozen_warnings": self._frozen_warnings,
+            "orphan_cleanups": self._orphan_cleanups,
+            "tracked_busy_tasks": len(self._last_busy_check),
         }
 
 
