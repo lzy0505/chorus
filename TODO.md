@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-30 16:35
+> Auto-updated by Claude Code. Last update: 2025-12-30 16:36
 
 ## In Progress
 
@@ -11,14 +11,15 @@
 <!-- Future enhancements -->
 
 ### Phase 5: Polish
-- [ ] Error handling
+- [x] Error handling (2025-12-30)
+- [x] Edge cases (2025-12-30)
 - [ ] Desktop notifications
-- [ ] Edge cases
 - [ ] Integration tests with tmux
 
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Implement robust corner case handling for status detection (2025-12-30)
 - [x] Implement hybrid status detection (hooks + polling) (2025-12-30)
 - [x] Use Claude CLI native prompt argument for reliable prompt delivery (2025-12-30)
 - [x] Auto-send initial prompt to spawned Claude sessions (2025-12-30)
