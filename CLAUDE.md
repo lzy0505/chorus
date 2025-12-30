@@ -55,7 +55,7 @@ chorus/
 
 ## Architecture
 
-Chorus uses a **hybrid JSON monitoring architecture** for tracking Claude Code sessions:
+Chorus monitors Claude Code sessions via JSON event parsing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -80,10 +80,9 @@ Chorus uses a **hybrid JSON monitoring architecture** for tracking Claude Code s
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key Benefits:**
-- **Deterministic event detection** — JSON parsing vs regex pattern matching
+**Key Features:**
+- **Deterministic event detection** — Parse structured JSON events
 - **Session resumption** — Extract `session_id` from JSON for `--resume`
-- **Simpler codebase** — ~500 fewer lines of code vs hook-based approach
 - **Instant status updates** — Real-time event stream from Claude
 
 ## Development

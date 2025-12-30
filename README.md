@@ -74,8 +74,6 @@ Chorus monitors Claude Code sessions by parsing their structured JSON output:
 3. **Events** trigger status updates and GitButler auto-commits
 4. **Session IDs** from JSON enable resumption with `--resume`
 
-This approach is simpler and more reliable than hook-based monitoring (500 fewer lines of code).
-
 ## Configuration
 
 Chorus requires two arguments:

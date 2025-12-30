@@ -503,11 +503,10 @@ class Monitor:
             task.json_session_id = event.session_id
 ```
 
-**Benefits over hooks:**
-- **Simpler codebase** — ~500 fewer lines (no hook infrastructure)
+**Key Features:**
 - **Session resumption** — Extract `session_id` from JSON for `--resume`
-- **Deterministic event detection** — JSON parsing vs regex patterns
-- **No external dependencies** — Self-contained monitoring
+- **Deterministic event detection** — Parse structured JSON events
+- **Self-contained monitoring** — Direct tmux output parsing
 
 ### GitButler Integration
 
