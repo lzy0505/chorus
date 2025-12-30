@@ -394,6 +394,12 @@ h1 {
     opacity: 0.5;
 }
 
+/* Disable loading indicator for auto-refresh polling */
+#task-info-refresh.htmx-request {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .error {
     color: var(--accent-red);
 }
