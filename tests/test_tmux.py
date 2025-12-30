@@ -97,12 +97,14 @@ class TestTmuxServiceCreateSession:
 class TestTmuxServiceStartClaude:
     """Tests for TmuxService.start_claude."""
 
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
-    def test_start_claude_success(self, mock_run, mock_exists):
+    def test_start_claude_success(self, mock_run, mock_exists, mock_env_get):
         """Test starting Claude in existing session with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
 
         service = TmuxService()
         service.start_claude(42)
@@ -113,13 +115,15 @@ class TestTmuxServiceStartClaude:
              'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
         )
 
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
     @patch("services.tmux.time.sleep")
-    def test_start_claude_with_prompt(self, mock_sleep, mock_run, mock_exists):
+    def test_start_claude_with_prompt(self, mock_sleep, mock_run, mock_exists, mock_env_get):
         """Test starting Claude with initial prompt."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
 
         service = TmuxService()
         service.start_claude(42, initial_prompt="Hello Claude")
@@ -151,13 +155,15 @@ class TestTmuxServiceStartClaude:
 class TestTmuxServiceRestartClaude:
     """Tests for TmuxService.restart_claude."""
 
+    @patch("services.tmux.os.environ.get")
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
     @patch("services.tmux.time.sleep")
-    def test_restart_claude_success(self, mock_sleep, mock_run, mock_exists):
+    def test_restart_claude_success(self, mock_sleep, mock_run, mock_exists, mock_env_get):
         """Test restarting Claude with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
+        mock_env_get.return_value = None  # No OAuth token
 
         service = TmuxService()
         service.restart_claude(42)

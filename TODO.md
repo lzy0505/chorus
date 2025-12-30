@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-30 13:50
+> Auto-updated by Claude Code. Last update: 2025-12-30 15:26
 
 ## In Progress
 
@@ -19,6 +19,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Auto-send initial prompt to spawned Claude sessions (2025-12-30)
 - [x] Inherit global Claude config (~/.claude/) for spawned sessions (2025-12-30)
 - [x] Optimize Claude hooks to use shared project-level config (2025-12-30)
 - [x] Implement minimal web dashboard with htmx + SSE (2025-12-29)
