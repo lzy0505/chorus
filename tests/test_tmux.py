@@ -100,15 +100,17 @@ class TestTmuxServiceStartClaude:
     @patch("services.tmux.session_exists")
     @patch("services.tmux._run_tmux")
     def test_start_claude_success(self, mock_run, mock_exists):
-        """Test starting Claude in existing session."""
+        """Test starting Claude in existing session with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
 
         service = TmuxService()
         service.start_claude(42)
 
+        # Claude should be launched with CLAUDE_CONFIG_DIR pointing to shared hooks config
         mock_run.assert_called_once_with(
-            ["send-keys", "-t", "claude-task-42", "claude", "Enter"]
+            ["send-keys", "-t", "claude-task-42",
+             'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
         )
 
     @patch("services.tmux.session_exists")
@@ -122,11 +124,12 @@ class TestTmuxServiceStartClaude:
         service = TmuxService()
         service.start_claude(42, initial_prompt="Hello Claude")
 
-        # Should call send-keys twice: once for 'claude', once for prompt
+        # Should call send-keys twice: once for 'claude' with config, once for prompt
         assert mock_run.call_count == 2
         calls = mock_run.call_args_list
         assert calls[0] == call(
-            ["send-keys", "-t", "claude-task-42", "claude", "Enter"]
+            ["send-keys", "-t", "claude-task-42",
+             'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
         )
         assert calls[1] == call(
             ["send-keys", "-t", "claude-task-42", "Hello Claude", "Enter"]
@@ -152,20 +155,21 @@ class TestTmuxServiceRestartClaude:
     @patch("services.tmux._run_tmux")
     @patch("services.tmux.time.sleep")
     def test_restart_claude_success(self, mock_sleep, mock_run, mock_exists):
-        """Test restarting Claude."""
+        """Test restarting Claude with shared config."""
         mock_exists.return_value = True
         mock_run.return_value = MagicMock(returncode=0)
 
         service = TmuxService()
         service.restart_claude(42)
 
-        # Should send Ctrl-C twice, then restart
+        # Should send Ctrl-C twice, then restart with shared config
         calls = mock_run.call_args_list
         assert len(calls) == 3
         assert calls[0] == call(["send-keys", "-t", "claude-task-42", "C-c"])
         assert calls[1] == call(["send-keys", "-t", "claude-task-42", "C-c"])
         assert calls[2] == call(
-            ["send-keys", "-t", "claude-task-42", "claude", "Enter"]
+            ["send-keys", "-t", "claude-task-42",
+             'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude', "Enter"]
         )
 
     @patch("services.tmux.session_exists")
