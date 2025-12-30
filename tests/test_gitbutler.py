@@ -83,22 +83,27 @@ class TestParsingFunctions:
         assert commit.changes == []
 
     def test_parse_stack(self):
-        """Test parsing a stack from JSON."""
+        """Test parsing a stack from JSON (new GitButler format)."""
         data = {
-            "name": "feature-auth",
             "cliId": "s1",
-            "commits": [
-                {
-                    "cliId": "c1",
-                    "commitId": "abc",
-                    "message": "Add auth",
-                    "authorName": "User",
-                    "authorEmail": "user@test.com",
-                    "createdAt": "2025-01-01T00:00:00Z",
-                }
-            ],
-            "changes": [
+            "assignedChanges": [
                 {"cliId": "g0", "filePath": "auth.py", "changeType": "added"}
+            ],
+            "branches": [
+                {
+                    "name": "feature-auth",
+                    "cliId": "s1",
+                    "commits": [
+                        {
+                            "cliId": "c1",
+                            "commitId": "abc",
+                            "message": "Add auth",
+                            "authorName": "User",
+                            "authorEmail": "user@test.com",
+                            "createdAt": "2025-01-01T00:00:00Z",
+                        }
+                    ],
+                }
             ],
         }
 
@@ -113,10 +118,11 @@ class TestParsingFunctions:
 
     def test_parse_stack_minimal(self):
         """Test parsing stack with missing fields."""
-        stack = _parse_stack({})
+        data = {"cliId": "s1", "assignedChanges": [], "branches": []}
+        stack = _parse_stack(data)
 
         assert stack.name == ""
-        assert stack.cli_id == ""
+        assert stack.cli_id == "s1"
         assert stack.commits == []
         assert stack.changes == []
 
@@ -159,7 +165,13 @@ class TestGitButlerServiceGetStatus:
         """Test getting workspace status."""
         status_json = {
             "stacks": [
-                {"name": "feature-1", "cliId": "s1", "commits": [], "changes": []}
+                {
+                    "cliId": "s1",
+                    "assignedChanges": [],
+                    "branches": [
+                        {"name": "feature-1", "cliId": "s1", "commits": []}
+                    ],
+                }
             ],
             "unassignedChanges": [
                 {"cliId": "g0", "filePath": "README.md", "changeType": "modified"}
@@ -251,7 +263,7 @@ class TestGitButlerServiceStackExists:
             args=["but", "status", "-j"],
             returncode=0,
             stdout=json.dumps({
-                "stacks": [{"name": "my-stack", "cliId": "s1"}],
+                "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "my-stack", "cliId": "s1", "commits": []}]}],
                 "unassignedChanges": [],
             }),
             stderr="",
@@ -295,7 +307,7 @@ class TestGitButlerServiceCreateStack:
         """Test creating a new stack."""
         # First call: status check (stack doesn't exist)
         # Second call: create stack
-        # Third call: status check (to return the stack)
+        # Third call: status check (to return the created stack)
         mock_run.side_effect = [
             CompletedProcess(
                 args=["but", "status", "-j"],
@@ -306,7 +318,20 @@ class TestGitButlerServiceCreateStack:
             CompletedProcess(
                 args=["but", "branch", "new", "task-1", "-j"],
                 returncode=0,
-                stdout=json.dumps({"name": "task-1", "cliId": "s1"}),
+                stdout=json.dumps({"branch": "task-1"}),
+                stderr="",
+            ),
+            CompletedProcess(
+                args=["but", "status", "-j"],
+                returncode=0,
+                stdout=json.dumps({
+                    "stacks": [{
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "task-1", "cliId": "s1", "commits": []}]
+                    }],
+                    "unassignedChanges": []
+                }),
                 stderr="",
             ),
         ]
@@ -324,7 +349,7 @@ class TestGitButlerServiceCreateStack:
             args=["but", "status", "-j"],
             returncode=0,
             stdout=json.dumps({
-                "stacks": [{"name": "existing", "cliId": "s1"}],
+                "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "existing", "cliId": "s1", "commits": []}]}],
                 "unassignedChanges": [],
             }),
             stderr="",
@@ -375,7 +400,7 @@ class TestGitButlerServiceDeleteStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "to-delete", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "to-delete", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -421,7 +446,7 @@ class TestGitButlerServiceDeleteStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -453,7 +478,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "my-stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "my-stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -488,7 +513,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -517,7 +542,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -554,14 +579,14 @@ class TestGitButlerServiceCommitToStack:
     def test_commit_to_stack_create_if_missing(self, mock_run):
         """Test auto-creating stack when missing."""
         mock_run.side_effect = [
-            # First status check - stack doesn't exist
+            # First status check - commit_to_stack's stack_exists call
             CompletedProcess(
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({"stacks": [], "unassignedChanges": []}),
                 stderr="",
             ),
-            # Create stack status check
+            # Second status check - create_stack's stack_exists call
             CompletedProcess(
                 args=["but", "status", "-j"],
                 returncode=0,
@@ -572,7 +597,21 @@ class TestGitButlerServiceCommitToStack:
             CompletedProcess(
                 args=["but", "branch", "new", "new-stack", "-j"],
                 returncode=0,
-                stdout=json.dumps({"name": "new-stack", "cliId": "s1"}),
+                stdout=json.dumps({"branch": "new-stack"}),
+                stderr="",
+            ),
+            # Get status after create to fetch the created stack
+            CompletedProcess(
+                args=["but", "status", "-j"],
+                returncode=0,
+                stdout=json.dumps({
+                    "stacks": [{
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "new-stack", "cliId": "s1", "commits": []}]
+                    }],
+                    "unassignedChanges": []
+                }),
                 stderr="",
             ),
             # Commit
@@ -597,7 +636,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -630,7 +669,7 @@ class TestGitButlerServiceGetStackCommits:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -695,8 +734,16 @@ class TestGitButlerServiceListStacks:
             returncode=0,
             stdout=json.dumps({
                 "stacks": [
-                    {"name": "stack-1", "cliId": "s1"},
-                    {"name": "stack-2", "cliId": "s2"},
+                    {
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "stack-1", "cliId": "s1", "commits": []}],
+                    },
+                    {
+                        "cliId": "s2",
+                        "assignedChanges": [],
+                        "branches": [{"name": "stack-2", "cliId": "s2", "commits": []}],
+                    },
                 ],
                 "unassignedChanges": [],
             }),
@@ -752,8 +799,8 @@ class TestGitButlerServiceGetStackByName:
             returncode=0,
             stdout=json.dumps({
                 "stacks": [
-                    {"name": "target", "cliId": "s1"},
-                    {"name": "other", "cliId": "s2"},
+                    {"cliId": "s1", "assignedChanges": [], "branches": [{"name": "target", "cliId": "s1", "commits": []}]},
+                    {"cliId": "s2", "assignedChanges": [], "branches": [{"name": "other", "cliId": "s2", "commits": []}]},
                 ],
                 "unassignedChanges": [],
             }),

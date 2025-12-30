@@ -132,18 +132,28 @@ def _parse_commit(data: dict) -> Commit:
 
 
 def _parse_stack(data: dict) -> Stack:
-    """Parse a stack from JSON."""
-    commits = []
-    if data.get("commits"):
-        commits = [_parse_commit(c) for c in data["commits"]]
+    """Parse a stack from GitButler CLI JSON output.
 
+    GitButler CLI returns a wrapper structure with 'branches' array containing the actual branch data.
+    """
+    # Extract the first branch from the wrapper
+    if not data.get("branches"):
+        return Stack(name="", cli_id=data.get("cliId", ""), commits=[], changes=[])
+
+    branch_data = data["branches"][0]
+
+    commits = []
+    if branch_data.get("commits"):
+        commits = [_parse_commit(c) for c in branch_data["commits"]]
+
+    # Changes are in assignedChanges at wrapper level
     changes = []
-    if data.get("changes"):
-        changes = [_parse_change(c) for c in data["changes"]]
+    if data.get("assignedChanges"):
+        changes = [_parse_change(c) for c in data["assignedChanges"]]
 
     return Stack(
-        name=data.get("name", ""),
-        cli_id=data.get("cliId", ""),
+        name=branch_data.get("name", ""),
+        cli_id=branch_data.get("cliId", ""),
         commits=commits,
         changes=changes,
     )
@@ -248,17 +258,13 @@ class GitButlerService:
         if result.returncode != 0:
             raise GitButlerError(f"Failed to create stack: {result.stderr}")
 
-        # Parse the JSON response
-        try:
-            data = json.loads(result.stdout)
-            return _parse_stack(data)
-        except json.JSONDecodeError:
-            # Command succeeded but no JSON - fetch the stack info
-            status = self.get_status()
-            for stack in status.stacks:
-                if stack.name == name:
-                    return stack
-            raise GitButlerError(f"Stack '{name}' created but not found in status")
+        # GitButler CLI returns {"branch": "name"} format, not a full stack object
+        # Fetch the full stack info from status
+        status = self.get_status()
+        for stack in status.stacks:
+            if stack.name == name:
+                return stack
+        raise GitButlerError(f"Stack '{name}' created but not found in status")
 
     def delete_stack(self, name: str, force: bool = True) -> None:
         """Delete a stack.
