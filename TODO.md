@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-30 16:36
+> Auto-updated by Claude Code. Last update: 2025-12-30 16:46
 
 ## In Progress
 
@@ -13,6 +13,7 @@
 ### Phase 5: Polish
 - [x] Error handling (2025-12-30)
 - [x] Edge cases (2025-12-30)
+- [x] Move polling configuration to TOML (2025-12-30)
 - [ ] Desktop notifications
 - [ ] Integration tests with tmux
 

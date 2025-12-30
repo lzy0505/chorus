@@ -27,6 +27,14 @@ class TmuxConfig:
 
 
 @dataclass
+class StatusPollingConfig:
+    """Status polling configuration."""
+    enabled: bool = True
+    interval: float = 5.0  # Poll every 5 seconds
+    frozen_threshold: float = 300.0  # Warn if busy > 5 minutes
+
+
+@dataclass
 class StatusPatterns:
     """Status detection patterns."""
     idle: list[str] = field(default_factory=lambda: [
@@ -49,6 +57,8 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     tmux: TmuxConfig = field(default_factory=TmuxConfig)
+    notifications: NotificationsConfig = field(default_factory=NotificationsConfig)
+    status_polling: StatusPollingConfig = field(default_factory=StatusPollingConfig)
     editor: str = "vim"
     document_patterns: list[str] = field(default_factory=lambda: [
         "*.md",
@@ -102,6 +112,14 @@ def load_config(config_path: Path | str, project_root: Path | str) -> Config:
         tmux=TmuxConfig(
             session_prefix=_get_nested(data, "tmux", "session_prefix", default="claude"),
             poll_interval=float(_get_nested(data, "tmux", "poll_interval", default=1.0)),
+        ),
+        notifications=NotificationsConfig(
+            enabled=_get_nested(data, "notifications", "enabled", default=True),
+        ),
+        status_polling=StatusPollingConfig(
+            enabled=_get_nested(data, "status_polling", "enabled", default=True),
+            interval=float(_get_nested(data, "status_polling", "interval", default=5.0)),
+            frozen_threshold=float(_get_nested(data, "status_polling", "frozen_threshold", default=300.0)),
         ),
         editor=_get_nested(data, "editor", "command", default="vim"),
         document_patterns=_get_nested(data, "documents", "patterns", default=[

@@ -211,16 +211,17 @@ class StatusPoller:
 _poller: Optional[StatusPoller] = None
 
 
-def get_status_poller(interval: float = 2.0) -> StatusPoller:
+def get_status_poller(interval: float = 2.0, frozen_threshold: float = 300.0) -> StatusPoller:
     """Get or create the global status poller instance.
 
     Args:
         interval: Polling interval in seconds
+        frozen_threshold: Seconds before considering Claude frozen
 
     Returns:
         StatusPoller instance
     """
     global _poller
     if _poller is None:
-        _poller = StatusPoller(interval=interval)
+        _poller = StatusPoller(interval=interval, frozen_threshold=frozen_threshold)
     return _poller
