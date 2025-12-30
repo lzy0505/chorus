@@ -363,6 +363,12 @@ class TestGlobalConfigPaths:
         config_path = get_global_config_path()
         assert config_path == Path.home() / ".claude" / "settings.json"
 
+    def test_get_global_credentials_path(self):
+        """Test that global credentials path points to ~/.claude.json."""
+        from services.hooks import get_global_credentials_path
+        creds_path = get_global_credentials_path()
+        assert creds_path == Path.home() / ".claude.json"
+
 
 class TestDeepMergeHooks:
     """Tests for deep_merge_hooks function."""
@@ -548,6 +554,57 @@ class TestEnsureHooksConfigWithGlobalConfig:
         settings = json.loads((test_dir / "settings.json").read_text())
         assert "hooks" in settings
         assert "SessionStart" in settings["hooks"]
+
+    def test_copies_credentials_file(self, tmp_path, monkeypatch):
+        """Test that ~/.claude.json credentials file is copied to config dir."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{}')
+
+        # Create credentials file at home root level (like ~/.claude.json)
+        global_creds = tmp_path / ".claude.json"
+        global_creds.write_text(json.dumps({
+            "oauthAccount": {"accessToken": "secret123"},
+            "userID": "user-abc",
+            "theme": "dark"
+        }))
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+        monkeypatch.setattr("services.hooks.get_global_credentials_path", lambda: global_creds)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # Credentials should be copied into config dir
+        copied_creds = test_dir / ".claude.json"
+        assert copied_creds.exists()
+        creds_data = json.loads(copied_creds.read_text())
+        assert "oauthAccount" in creds_data
+        assert creds_data["userID"] == "user-abc"
+
+    def test_works_without_credentials_file(self, tmp_path, monkeypatch):
+        """Test that config works even if ~/.claude.json doesn't exist."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{"model": "opus"}')
+
+        # No credentials file
+        global_creds = tmp_path / "nonexistent.json"
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+        monkeypatch.setattr("services.hooks.get_global_credentials_path", lambda: global_creds)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # Should still create config, just without credentials
+        assert test_dir.exists()
+        settings = json.loads((test_dir / "settings.json").read_text())
+        assert "hooks" in settings
 
 
 class TestHooksService:

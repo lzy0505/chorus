@@ -13,8 +13,9 @@ Hook events used:
 Isolation with Global Config Inheritance:
 Hooks are written to /tmp/chorus/hooks/.claude/ to avoid polluting
 the hosted project's working directory. The isolated config is created by:
-1. Copying all files from ~/.claude/ (credentials, settings, projects, etc.)
-2. Deep merging Chorus-specific hooks into settings.json
+1. Copying all files from ~/.claude/ (settings, projects, etc.)
+2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+3. Deep merging Chorus-specific hooks into settings.json
 
 This ensures each tmux session has access to:
 - Login credentials (no re-authentication needed for spawned sessions)
@@ -41,6 +42,17 @@ def get_global_config_dir() -> Path:
         Path to ~/.claude/
     """
     return Path.home() / ".claude"
+
+
+def get_global_credentials_path() -> Path:
+    """Get the path to the global Claude credentials file.
+
+    Claude stores credentials in ~/.claude.json (at home root, not inside .claude/).
+
+    Returns:
+        Path to ~/.claude.json
+    """
+    return Path.home() / ".claude.json"
 
 
 def get_global_config_path() -> Path:
@@ -226,8 +238,9 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     """Ensure hooks configuration exists in the shared config directory.
 
     Creates /tmp/chorus/hooks/.claude/ by:
-    1. Copying all files from ~/.claude/ (credentials, settings, etc.)
-    2. Merging Chorus-specific hooks into settings.json
+    1. Copying all files from ~/.claude/ (settings, projects, etc.)
+    2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+    3. Merging Chorus-specific hooks into settings.json
 
     This ensures tmux sessions have access to:
     - Login credentials (no re-authentication needed)
@@ -254,12 +267,19 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     if config_dir.exists() and force:
         shutil.rmtree(config_dir)
 
-    # Copy entire global config directory if it exists (includes credentials)
+    # Copy entire global config directory if it exists
     global_config_dir = get_global_config_dir()
     if global_config_dir.exists():
         shutil.copytree(global_config_dir, config_dir, dirs_exist_ok=True)
     else:
         config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy credentials file (~/.claude.json) to the config directory
+    # Claude expects .claude.json inside CLAUDE_CONFIG_DIR (contains oauthAccount)
+    global_creds = get_global_credentials_path()
+    if global_creds.exists():
+        target_creds = config_dir / ".claude.json"
+        shutil.copy2(global_creds, target_creds)
 
     # Load existing settings (from copied global config) or start fresh
     if settings_path.exists():
@@ -300,8 +320,11 @@ class HooksService:
     - Parsing hook payloads
 
     Hooks are written to /tmp/chorus/hooks/.claude/ - a shared location
-    for all Claude sessions. The config is created by copying all files from
-    ~/.claude/ (including credentials) and merging Chorus hooks into settings.json.
+    for all Claude sessions. The config is created by:
+    1. Copying all files from ~/.claude/ (settings, projects, etc.)
+    2. Copying ~/.claude.json (credentials with oauthAccount) into the config dir
+    3. Merging Chorus hooks into settings.json
+
     This keeps the global config clean while providing full functionality and
     eliminating the need for re-authentication in spawned sessions.
     """
