@@ -55,18 +55,23 @@ chorus/
 
 ## Architecture
 
-Chorus monitors Claude Code sessions via JSON event parsing:
+Chorus supports two monitoring modes (configurable via `chorus.toml`):
+
+### JSON Mode (Recommended - New Architecture)
+
+Set `monitoring.use_json_mode = true` in `chorus.toml`.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ services/tmux.py                                             │
-│ └─ start_claude() → `claude -p --output-format stream-json` │
+│ └─ start_claude_json_mode() → `claude --output-format       │
+│                                 stream-json`                 │
 │ └─ capture_json_events() → Parse JSON from tmux             │
 └─────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ services/monitor.py (JSON Monitor)                          │
+│ services/json_monitor.py (JSON Monitor)                     │
 │ └─ poll_json_events() → Parse stream-json from tmux         │
 │ └─ handle_tool_use() → Detect file edits                    │
 │ └─ handle_tool_result() → Trigger GitButler commit          │
@@ -83,7 +88,14 @@ Chorus monitors Claude Code sessions via JSON event parsing:
 **Key Features:**
 - **Deterministic event detection** — Parse structured JSON events
 - **Session resumption** — Extract `session_id` from JSON for `--resume`
-- **Instant status updates** — Real-time event stream from Claude
+- **Real-time status updates** — Event-driven architecture
+- **More reliable** — No regex pattern matching, structured data
+
+### Legacy Hook Mode
+
+Set `monitoring.use_json_mode = false` (default for compatibility).
+
+Uses Claude Code hooks (SessionStart, ToolUse, etc.) + status polling for detection. See git history for hook-based architecture details.
 
 ## Development
 

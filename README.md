@@ -67,12 +67,18 @@ open http://localhost:8000
 
 ## How It Works
 
-Chorus monitors Claude Code sessions by parsing their structured JSON output:
+Chorus supports two monitoring modes (configurable in `chorus.toml`):
+
+### JSON Mode (Recommended)
+Enable with `monitoring.use_json_mode = true`:
 
 1. **Claude sessions** are launched with `--output-format stream-json` flag
 2. **JSON Monitor** polls tmux output and parses JSON events
 3. **Events** trigger status updates and GitButler auto-commits
 4. **Session IDs** from JSON enable resumption with `--resume`
+
+### Legacy Hook Mode (Default)
+Set `monitoring.use_json_mode = false` for hook-based monitoring via Claude Code callbacks.
 
 ## Configuration
 
