@@ -67,6 +67,13 @@ class LoggingConfig:
 
 
 @dataclass
+class MonitoringConfig:
+    """Claude session monitoring configuration."""
+    use_json_mode: bool = False  # Use JSON event parsing (new) vs hooks (old)
+    poll_interval: float = 1.0  # Seconds between monitoring cycles
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -75,6 +82,7 @@ class Config:
     notifications: NotificationsConfig = field(default_factory=NotificationsConfig)
     status_polling: StatusPollingConfig = field(default_factory=StatusPollingConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
     editor: str = "vim"
     document_patterns: list[str] = field(default_factory=lambda: [
         "*.md",
@@ -142,6 +150,10 @@ def load_config(config_path: Path | str, project_root: Path | str) -> Config:
             format=_get_nested(data, "logging", "format", default="%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
             log_subprocess=_get_nested(data, "logging", "log_subprocess", default=True),
             log_api_requests=_get_nested(data, "logging", "log_api_requests", default=True),
+        ),
+        monitoring=MonitoringConfig(
+            use_json_mode=_get_nested(data, "monitoring", "use_json_mode", default=False),
+            poll_interval=float(_get_nested(data, "monitoring", "poll_interval", default=1.0)),
         ),
         editor=_get_nested(data, "editor", "command", default="vim"),
         document_patterns=_get_nested(data, "documents", "patterns", default=[

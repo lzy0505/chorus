@@ -67,24 +67,59 @@ async def lifespan(app: FastAPI):
 
     create_db_and_tables()
 
-    # Start status poller in hybrid mode (if enabled)
-    # Hooks provide fast updates, poller acts as safety net
-    if config.status_polling.enabled:
-        from services.status_poller import get_status_poller
-        poller = get_status_poller(
-            interval=config.status_polling.interval,
-            frozen_threshold=config.status_polling.frozen_threshold
+    # Start monitoring service based on configuration
+    monitor = None
+    poller = None
+
+    if config.monitoring.use_json_mode:
+        # Use new JSON-based monitoring
+        logger.info("Using JSON-based monitoring (new architecture)")
+        from database import get_db
+        from services.json_monitor import JsonMonitor
+        from services.json_parser import JsonEventParser
+        from services.tmux import TmuxService
+        from services.gitbutler import GitButlerService
+
+        # Create dependencies
+        db_gen = get_db()
+        db = next(db_gen)
+        tmux = TmuxService()
+        gitbutler = GitButlerService()
+        json_parser = JsonEventParser()
+
+        # Create and start JSON monitor
+        from services.json_monitor import JsonMonitor
+        monitor = JsonMonitor(
+            db=db,
+            tmux=tmux,
+            gitbutler=gitbutler,
+            json_parser=json_parser,
+            poll_interval=config.monitoring.poll_interval,
         )
-        poller.start()
-        logger.info(f"Status poller started in hybrid mode (interval: {config.status_polling.interval}s, frozen_threshold: {config.status_polling.frozen_threshold}s)")
+        import asyncio
+        monitor_task = asyncio.create_task(monitor.start())
+        logger.info(f"JSON monitor started (poll_interval: {config.monitoring.poll_interval}s)")
     else:
-        poller = None
-        logger.info("Status polling disabled in configuration")
+        # Use legacy hook-based monitoring with status poller
+        logger.info("Using legacy hook-based monitoring")
+        if config.status_polling.enabled:
+            from services.status_poller import get_status_poller
+            poller = get_status_poller(
+                interval=config.status_polling.interval,
+                frozen_threshold=config.status_polling.frozen_threshold
+            )
+            poller.start()
+            logger.info(f"Status poller started in hybrid mode (interval: {config.status_polling.interval}s, frozen_threshold: {config.status_polling.frozen_threshold}s)")
+        else:
+            logger.info("Status polling disabled in configuration")
 
     yield
 
     # Shutdown
     logger.info("Chorus shutting down...")
+    if monitor is not None:
+        monitor.stop()
+        logger.info("JSON monitor stopped")
     if poller is not None:
         await poller.stop()
         stats = poller.get_stats()
