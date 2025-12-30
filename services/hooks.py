@@ -75,40 +75,29 @@ def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dic
         f"r.urlopen(r.Request('{url}/api/hooks/' + d['hook_event_name'].lower(), " \
         "json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
 
-    return {
-        "hooks": {
-            "SessionStart": [
-                {
-                    "type": "command",
-                    "command": handler_script,
-                }
-            ],
-            "Stop": [
-                {
-                    "type": "command",
-                    "command": handler_script,
-                }
-            ],
-            "PermissionRequest": [
-                {
-                    "type": "command",
-                    "command": handler_script,
-                }
-            ],
-            "SessionEnd": [
-                {
-                    "type": "command",
-                    "command": handler_script,
-                }
-            ],
-            "PostToolUse": [
-                {
-                    "type": "command",
-                    "command": handler_script,
-                }
-            ],
-        }
-    }
+    # Events that don't need a matcher - use simple format
+    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
+    # Events that need a matcher (use "*" for all tools) - use nested format
+    matcher_events = ["PermissionRequest", "PostToolUse"]
+
+    hooks_config: dict = {"hooks": {}}
+
+    for event in no_matcher_events:
+        hooks_config["hooks"][event] = [
+            {"type": "command", "command": handler_script}
+        ]
+
+    for event in matcher_events:
+        hooks_config["hooks"][event] = [
+            {
+                "matcher": "*",
+                "hooks": [
+                    {"type": "command", "command": handler_script}
+                ]
+            }
+        ]
+
+    return hooks_config
 
 
 def generate_hooks_config_with_handler(
@@ -134,15 +123,24 @@ def generate_hooks_config_with_handler(
     # Handler script receives JSON via stdin, task_id and url as env vars
     command = f"CHORUS_URL={url} CHORUS_TASK_ID={task_id} python {handler_path}"
 
-    return {
-        "hooks": {
-            "SessionStart": [{"type": "command", "command": command}],
-            "Stop": [{"type": "command", "command": command}],
-            "PermissionRequest": [{"type": "command", "command": command}],
-            "SessionEnd": [{"type": "command", "command": command}],
-            "PostToolUse": [{"type": "command", "command": command}],
-        }
-    }
+    # Events that don't need a matcher - use simple format
+    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
+    # Events that need a matcher (use "*" for all tools) - use nested format
+    matcher_events = ["PermissionRequest", "PostToolUse"]
+
+    hooks_config: dict = {"hooks": {}}
+
+    for event in no_matcher_events:
+        hooks_config["hooks"][event] = [
+            {"type": "command", "command": command}
+        ]
+
+    for event in matcher_events:
+        hooks_config["hooks"][event] = [
+            {"matcher": "*", "hooks": [{"type": "command", "command": command}]}
+        ]
+
+    return hooks_config
 
 
 def write_hooks_config(

@@ -4,7 +4,7 @@
 <div class="dashboard" hx-ext="sse" sse-connect="/api/events">
     <!-- New Task Form -->
     <div class="panel new-task-panel">
-        <form hx-post="/api/tasks" hx-target="#task-list" hx-swap="afterbegin" hx-on::after-request="this.reset()">
+        <form hx-post="/dashboard/tasks" hx-target="#task-list" hx-swap="afterbegin" hx-on::after-request="this.reset()">
             <input type="text" name="title" placeholder="New task title..." class="task-input" required>
             <button type="submit" class="btn btn-primary">+ Add Task</button>
         </form>
@@ -14,7 +14,7 @@
     <div class="panel task-panel">
         <div class="panel-header">
             <span>Tasks</span>
-            <div class="filter-tabs">
+            <div class="filter-tabs" onclick="if(event.target.classList.contains('tab')){this.querySelector('.active')?.classList.remove('active');event.target.classList.add('active')}">
                 <button class="tab active" hx-get="/dashboard/tasks" hx-target="#task-list">All</button>
                 <button class="tab" hx-get="/dashboard/tasks?status=running" hx-target="#task-list">Running</button>
                 <button class="tab" hx-get="/dashboard/tasks?status=pending" hx-target="#task-list">Pending</button>

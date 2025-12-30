@@ -18,6 +18,22 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 templates = Jinja2Templates(directory="templates")
 
 
+def _render_task_with_oob(request: Request, task: Task) -> HTMLResponse:
+    """Render task detail with out-of-band task list item update."""
+    detail_html = templates.get_template("partials/task_detail.html").render(
+        request=request, task=task
+    )
+    item_html = templates.get_template("partials/task_item.html").render(
+        request=request, task=task
+    )
+    # Add hx-swap-oob to the task item for out-of-band swap
+    oob_item = item_html.replace(
+        f'id="task-{task.id}"',
+        f'id="task-{task.id}" hx-swap-oob="true"'
+    )
+    return HTMLResponse(detail_html + oob_item)
+
+
 @router.get("/tasks", response_class=HTMLResponse)
 async def get_task_list(
     request: Request,
@@ -36,20 +52,60 @@ async def get_task_list(
     )
 
 
+@router.post("/tasks", response_class=HTMLResponse)
+async def create_task(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create a task from form data and return task item HTML."""
+    form = await request.form()
+    title = form.get("title", "").strip()
+
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
+    task = Task(title=title)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return templates.TemplateResponse(
+        request, "partials/task_item.html", {"task": task}
+    )
+
+
+@router.delete("/tasks/{task_id}", response_class=HTMLResponse)
+async def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a task and return HTML to clear task item and detail panel."""
+    from api.tasks import delete_task as api_delete_task
+
+    try:
+        await api_delete_task(task_id, db)
+    except HTTPException:
+        raise
+
+    # Return empty content for the task item (removes it) plus OOB to clear detail
+    empty_detail = '''<div class="panel-header" hx-swap-oob="innerHTML:#task-detail">Task Detail</div>
+<p class="muted" hx-swap-oob="true" id="task-detail-placeholder">Select a task to view details</p>'''
+    return HTMLResponse(empty_detail)
+
+
 @router.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def get_task_detail(
     request: Request,
     task_id: int,
     db: Session = Depends(get_db),
 ):
-    """Get task detail as HTML partial."""
+    """Get task detail as HTML partial with OOB task list update."""
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return templates.TemplateResponse(
-        request, "partials/task_detail.html", {"task": task}
-    )
+    # Return detail with OOB swap for task list item
+    return _render_task_with_oob(request, task)
 
 
 @router.get("/tasks/{task_id}/output", response_class=HTMLResponse)
@@ -101,6 +157,80 @@ async def send_message(
 
     # Return current output (will update via polling)
     return await get_task_output(task_id, db)
+
+
+@router.post("/tasks/{task_id}/start", response_class=HTMLResponse)
+async def start_task(
+    request: Request,
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Start a task and return updated task detail HTML + OOB task item."""
+    from api.tasks import start_task as api_start_task, TaskStartRequest
+
+    # Call the API function to do the actual work
+    try:
+        await api_start_task(task_id, TaskStartRequest(), db)
+    except HTTPException:
+        raise
+
+    # Refresh task and return HTML with OOB swap for task list item
+    task = db.get(Task, task_id)
+    return _render_task_with_oob(request, task)
+
+
+@router.post("/tasks/{task_id}/restart-claude", response_class=HTMLResponse)
+async def restart_claude(
+    request: Request,
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Restart Claude and return updated task detail HTML + OOB task item."""
+    from api.tasks import restart_claude as api_restart_claude
+
+    try:
+        await api_restart_claude(task_id, db)
+    except HTTPException:
+        raise
+
+    task = db.get(Task, task_id)
+    return _render_task_with_oob(request, task)
+
+
+@router.post("/tasks/{task_id}/complete", response_class=HTMLResponse)
+async def complete_task(
+    request: Request,
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Complete a task and return updated task detail HTML + OOB task item."""
+    from api.tasks import complete_task as api_complete_task, TaskCompleteRequest
+
+    try:
+        await api_complete_task(task_id, TaskCompleteRequest(), db)
+    except HTTPException:
+        raise
+
+    task = db.get(Task, task_id)
+    return _render_task_with_oob(request, task)
+
+
+@router.post("/tasks/{task_id}/fail", response_class=HTMLResponse)
+async def fail_task(
+    request: Request,
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """Fail a task and return updated task detail HTML + OOB task item."""
+    from api.tasks import fail_task as api_fail_task, TaskFailRequest
+
+    try:
+        await api_fail_task(task_id, TaskFailRequest(), db)
+    except HTTPException:
+        raise
+
+    task = db.get(Task, task_id)
+    return _render_task_with_oob(request, task)
 
 
 @router.post("/tasks/{task_id}/respond", response_class=HTMLResponse)
