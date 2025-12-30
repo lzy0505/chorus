@@ -79,17 +79,23 @@
     </button>
 
     {% elif task.status.value == 'waiting' %}
-    <button class="btn btn-success"
-            hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=true"
+    <button class="btn btn-secondary"
+            hx-post="/dashboard/tasks/{{ task.id }}/restart-claude"
             hx-target="#task-detail"
             hx-swap="innerHTML">
-        Approve
+        Restart Claude
+    </button>
+    <button class="btn btn-success"
+            hx-post="/dashboard/tasks/{{ task.id }}/complete"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Complete
     </button>
     <button class="btn btn-danger"
-            hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=false"
+            hx-post="/dashboard/tasks/{{ task.id }}/fail"
             hx-target="#task-detail"
             hx-swap="innerHTML">
-        Deny
+        Fail
     </button>
     {% if task.permission_prompt %}
     <div class="permission-prompt">{{ task.permission_prompt }}</div>
@@ -115,20 +121,28 @@
 
 <!-- Terminal (for running tasks) - outside refresh zone -->
 {% if task.status.value in ['running', 'waiting'] %}
-<div class="terminal-section">
-    <div class="terminal-header">
-        <span>Terminal</span>
-        <a href="http://localhost:{{ 7681 + task.id }}" target="_blank" class="btn btn-small">
-            Open in New Tab
-        </a>
+    {% if tmux_session_exists %}
+    <div class="terminal-section">
+        <div class="terminal-header">
+            <span>Terminal</span>
+            <a href="http://localhost:{{ 7681 + task.id }}" target="_blank" class="btn btn-small">
+                Open in New Tab
+            </a>
+        </div>
+        <iframe
+            id="terminal-iframe-{{ task.id }}"
+            src="http://localhost:{{ 7681 + task.id }}"
+            class="terminal-iframe"
+            title="Task Terminal">
+        </iframe>
     </div>
-    <iframe
-        id="terminal-iframe-{{ task.id }}"
-        src="http://localhost:{{ 7681 + task.id }}"
-        class="terminal-iframe"
-        title="Task Terminal">
-    </iframe>
-</div>
+    {% else %}
+    <div class="terminal-section">
+        <div class="terminal-error">
+            <strong>Error:</strong> tmux session not found. The terminal session should be alive throughout the task lifecycle.
+        </div>
+    </div>
+    {% endif %}
 {% endif %}
 
 </div><!-- end task-detail-content -->

@@ -20,8 +20,14 @@ templates = Jinja2Templates(directory="templates")
 
 def _render_task_with_oob(request: Request, task: Task) -> HTMLResponse:
     """Render task detail with out-of-band task list item update."""
+    # Check if tmux session exists for running/waiting tasks
+    tmux_session_exists = False
+    if task.status in (TaskStatus.running, TaskStatus.waiting):
+        tmux = TmuxService()
+        tmux_session_exists = tmux.session_exists(task.id)
+
     detail_html = templates.get_template("partials/task_detail.html").render(
-        request=request, task=task
+        request=request, task=task, tmux_session_exists=tmux_session_exists
     )
     item_html = templates.get_template("partials/task_item.html").render(
         request=request, task=task
