@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-30 15:50
+> Auto-updated by Claude Code. Last update: 2025-12-30 16:12
 
 ## In Progress
 
@@ -19,6 +19,7 @@
 ## Completed
 
 <!-- Done tasks, most recent first -->
+- [x] Fix Claude status detection: Set status to 'busy' when sending messages (2025-12-30)
 - [x] Use Claude CLI native prompt argument for reliable prompt delivery (2025-12-30)
 - [x] Auto-send initial prompt to spawned Claude sessions (2025-12-30)
 - [x] Inherit global Claude config (~/.claude/) for spawned sessions (2025-12-30)

@@ -380,6 +380,11 @@ async def send_message(
             detail=f"Tmux session for task {task_id} not found",
         )
 
+    # Update status to busy since Claude is now processing
+    task.claude_status = ClaudeStatus.busy
+    db.add(task)
+    db.commit()
+
     return ActionResponse(
         status="ok",
         message=f"Message sent to task {task_id}",
@@ -415,8 +420,10 @@ async def respond_to_permission(
             detail=f"Tmux session for task {task_id} not found",
         )
 
-    # Status will be updated by the Stop hook when Claude responds
+    # Update status to busy since Claude is now processing the response
     task.permission_prompt = None
+    task.claude_status = ClaudeStatus.busy
+    task.status = TaskStatus.running
     db.add(task)
     db.commit()
 
