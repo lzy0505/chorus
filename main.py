@@ -92,6 +92,61 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# Exception handlers
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError):
+    """Handle service errors (tmux, gitbutler, etc)."""
+    status_code = 500
+    error_type = "service_error"
+
+    if isinstance(exc, RecoverableError):
+        status_code = 409  # Conflict - can be retried
+        error_type = "recoverable_error"
+    elif isinstance(exc, UnrecoverableError):
+        status_code = 500
+        error_type = "unrecoverable_error"
+
+    logger.error(f"{error_type}: {exc}", exc_info=True)
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": error_type,
+            "message": str(exc),
+            "detail": "Check logs for more information",
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with detailed messages."""
+    logger.warning(f"Validation error: {exc}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Invalid request data",
+            "details": exc.errors(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler for unexpected errors."""
+    logger.exception(f"Unexpected error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": "An unexpected error occurred",
+            "detail": str(exc) if os.environ.get("DEBUG") else "Check logs",
+        },
+    )
+
+
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
