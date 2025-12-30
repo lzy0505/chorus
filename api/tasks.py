@@ -20,7 +20,9 @@ from services.gitbutler import GitButlerService, StackExistsError, GitButlerErro
 from services.hooks import HooksService
 from services.context import write_task_context, cleanup_task_context, get_context_file
 from services.ttyd import TtydService
+from services.logging_utils import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
@@ -129,6 +131,7 @@ async def create_task(
     The task starts in 'pending' status. Use POST /api/tasks/{id}/start
     to create the GitButler stack and start Claude.
     """
+    logger.info(f"Creating task: {task_data.title}")
     task = Task(
         title=task_data.title,
         description=task_data.description,
@@ -137,6 +140,7 @@ async def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    logger.info(f"Created task {task.id}: {task.title}")
     return task
 
 
@@ -194,6 +198,7 @@ async def delete_task(
     Only pending or failed tasks can be deleted. Running tasks must be
     completed or failed first.
     """
+    logger.info(f"Deleting task {task_id}")
     task = get_task_or_404(db, task_id)
 
     if task.status in (TaskStatus.running, TaskStatus.waiting):
@@ -229,9 +234,11 @@ async def start_task(
 
     The task must be in 'pending' status.
     """
+    logger.info(f"Starting task {task_id}")
     task = get_task_or_404(db, task_id)
 
     if task.status != TaskStatus.pending:
+        logger.warning(f"Cannot start task {task_id}: status is {task.status}")
         raise HTTPException(
             status_code=400,
             detail=f"Task is {task.status}, can only start pending tasks",
@@ -289,6 +296,7 @@ async def start_task(
     kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
     tmux.start_claude(task_id, initial_prompt=kickoff_message, context_file=context_file)
 
+    logger.info(f"Task {task_id} started successfully with stack '{task.stack_name}'")
     return ActionResponse(
         status="ok",
         message=f"Task {task_id} started with stack '{task.stack_name}'",
@@ -306,6 +314,7 @@ async def restart_claude(
     Use this when Claude hangs, crashes, or loses context.
     The tmux session and GitButler stack are preserved.
     """
+    logger.info(f"Restarting Claude for task {task_id}")
     task = get_task_or_404(db, task_id)
 
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
@@ -342,6 +351,7 @@ async def restart_claude(
     db.add(task)
     db.commit()
 
+    logger.info(f"Claude restarted for task {task_id} (restart #{task.claude_restarts})")
     return ActionResponse(
         status="ok",
         message=f"Claude restarted for task {task_id} (restart #{task.claude_restarts})",
@@ -356,6 +366,7 @@ async def send_message(
     db: Session = Depends(get_db),
 ) -> ActionResponse:
     """Send a message to Claude in the task's tmux session."""
+    logger.info(f"Sending message to task {task_id}: {request.message[:50]}...")
     task = get_task_or_404(db, task_id)
 
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
@@ -397,6 +408,7 @@ async def respond_to_permission(
 
     Use this when the task is in 'waiting' status.
     """
+    logger.info(f"Responding to permission prompt for task {task_id}: {'confirm' if request.confirm else 'deny'}")
     task = get_task_or_404(db, task_id)
 
     if task.status != TaskStatus.waiting:
@@ -443,6 +455,7 @@ async def complete_task(
 
     The GitButler stack is preserved with all commits.
     """
+    logger.info(f"Completing task {task_id}")
     task = get_task_or_404(db, task_id)
 
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
@@ -476,6 +489,7 @@ async def complete_task(
     db.add(task)
     db.commit()
 
+    logger.info(f"Task {task_id} marked as completed")
     return ActionResponse(
         status="ok",
         message=f"Task {task_id} completed",

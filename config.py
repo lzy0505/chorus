@@ -58,6 +58,15 @@ class NotificationsConfig:
 
 
 @dataclass
+class LoggingConfig:
+    """Logging configuration."""
+    level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_subprocess: bool = True  # Log external tool invocations
+    log_api_requests: bool = True  # Log API endpoint calls
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -65,6 +74,7 @@ class Config:
     tmux: TmuxConfig = field(default_factory=TmuxConfig)
     notifications: NotificationsConfig = field(default_factory=NotificationsConfig)
     status_polling: StatusPollingConfig = field(default_factory=StatusPollingConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
     editor: str = "vim"
     document_patterns: list[str] = field(default_factory=lambda: [
         "*.md",
@@ -126,6 +136,12 @@ def load_config(config_path: Path | str, project_root: Path | str) -> Config:
             enabled=_get_nested(data, "status_polling", "enabled", default=True),
             interval=float(_get_nested(data, "status_polling", "interval", default=5.0)),
             frozen_threshold=float(_get_nested(data, "status_polling", "frozen_threshold", default=300.0)),
+        ),
+        logging=LoggingConfig(
+            level=_get_nested(data, "logging", "level", default="INFO"),
+            format=_get_nested(data, "logging", "format", default="%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
+            log_subprocess=_get_nested(data, "logging", "log_subprocess", default=True),
+            log_api_requests=_get_nested(data, "logging", "log_api_requests", default=True),
         ),
         editor=_get_nested(data, "editor", "command", default="vim"),
         document_patterns=_get_nested(data, "documents", "patterns", default=[
