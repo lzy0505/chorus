@@ -174,9 +174,13 @@ async def start_task(
     """Start a task and return updated task detail HTML + OOB task item."""
     from api.tasks import start_task as api_start_task, TaskStartRequest
 
+    # Parse form data to get initial_prompt if provided
+    form_data = await request.form()
+    initial_prompt = form_data.get("initial_prompt", "").strip() or None
+
     # Call the API function to do the actual work
     try:
-        await api_start_task(task_id, TaskStartRequest(), db)
+        await api_start_task(task_id, TaskStartRequest(initial_prompt=initial_prompt), db)
     except HTTPException:
         raise
 

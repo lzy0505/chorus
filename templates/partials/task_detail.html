@@ -44,12 +44,20 @@
 <!-- Action Buttons -->
 <div class="task-actions">
     {% if task.status.value == 'pending' %}
-    <button class="btn btn-primary"
-            hx-post="/dashboard/tasks/{{ task.id }}/start"
-            hx-target="#task-detail"
-            hx-swap="innerHTML">
-        Start Task
-    </button>
+    <div class="start-task-form">
+        <input type="text"
+               id="initial-prompt-{{ task.id }}"
+               placeholder="Initial prompt for Claude (optional)"
+               class="message-input">
+        <button class="btn btn-primary"
+                hx-post="/dashboard/tasks/{{ task.id }}/start"
+                hx-target="#task-detail"
+                hx-swap="innerHTML"
+                hx-include="#initial-prompt-{{ task.id }}"
+                hx-vals='js:{initial_prompt: document.getElementById("initial-prompt-{{ task.id }}").value}'>
+            Start Task
+        </button>
+    </div>
     <button class="btn btn-danger"
             hx-delete="/dashboard/tasks/{{ task.id }}"
             hx-target="#task-{{ task.id }}"
@@ -135,6 +143,16 @@
             class="terminal-iframe"
             title="Task Terminal">
         </iframe>
+
+        <!-- Send Message Form -->
+        <form class="send-form" hx-post="/dashboard/tasks/{{ task.id }}/send" hx-swap="none">
+            <input type="text"
+                   name="message"
+                   placeholder="Send a message to Claude (Ctrl/Cmd+Enter to send)"
+                   class="message-input"
+                   autocomplete="off">
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
     </div>
     {% else %}
     <div class="terminal-section">
