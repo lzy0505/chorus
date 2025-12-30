@@ -95,19 +95,47 @@
 - [ ] htmx interactions for all task actions
 - [ ] SSE integration for real-time updates
 
-### Phase 5: Polish
-- [ ] Error handling
-  - [ ] tmux session not found
-  - [ ] Claude crash detection
-  - [ ] GitButler failures
-- [ ] Edge cases
-  - [ ] Task tmux dies unexpectedly
-  - [ ] Claude hangs (no output)
-  - [ ] Branch conflicts
+### Phase 5: Polish ✅
+- [x] Error handling (2025-12-30)
+  - [x] tmux session not found
+  - [x] Claude crash detection
+  - [x] GitButler failures
+- [x] Edge cases (2025-12-30)
+  - [x] Task tmux dies unexpectedly
+  - [x] Claude hangs (no output)
+  - [x] Branch conflicts
+- [x] Comprehensive logging for debugging (2025-12-30)
+  - [x] Configurable log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  - [x] Subprocess command logging (tmux, GitButler CLI, ttyd)
+  - [x] API request logging
+  - [x] Logging utilities module (`services/logging_utils.py`)
+  - [x] Documentation updates
 - [ ] Desktop notifications (`services/notifier.py`)
 - [ ] Manual testing checklist
 
 ## Notes
+
+### Logging Implementation (2025-12-30)
+
+Added comprehensive logging system for debugging external tool interactions:
+
+**Components:**
+- `services/logging_utils.py` - Logging utility functions
+  - `log_subprocess_call()` - Logs external commands with output
+  - `log_api_request()` - Logs HTTP requests
+  - `configure_logging()` - Application-wide logging setup
+- Configuration via TOML (`logging.level`, `log_subprocess`, `log_api_requests`)
+- Applied to all services: tmux, gitbutler, ttyd
+- Applied to API endpoints: tasks, hooks, events
+
+**Benefits:**
+- Easy debugging of tmux/GitButler command failures
+- Detailed visibility into external tool interactions
+- Configurable verbosity (DEBUG for troubleshooting, INFO for production)
+- Automatic output truncation prevents log spam
+
+**Usage:**
+Set `level = "DEBUG"` in `chorus.toml` to see full subprocess execution details when troubleshooting.
 
 ### Architecture Decision: Hooks over Polling (2025-12-29)
 Changed from terminal polling to Claude Code hooks for status detection:

@@ -991,17 +991,113 @@ if global_creds.exists():
 
 ## Configuration
 
-### Environment Variables
+### TOML Configuration
+
+Chorus uses a TOML configuration file passed as the first argument:
 
 ```bash
-PROJECT_ROOT=/path/to/your/project    # Required
-EDITOR=nvim                           # Optional
-PORT=8000                             # Optional
-POLL_INTERVAL=1.0                     # Status polling interval
-CLAUDE_CODE_OAUTH_TOKEN=<token>       # Required for spawned session auth (see below)
+uv run python main.py chorus.toml /absolute/path/to/project
 ```
 
+Example `chorus.toml`:
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 8000
+
+[database]
+url = "sqlite:///orchestrator.db"
+
+[tmux]
+session_prefix = "claude"
+poll_interval = 1.0
+
+[editor]
+command = "vim"
+
+[documents]
+patterns = [
+    "*.md",
+    "docs/**/*.md",
+    ".claude/**/*.md",
+]
+
+[logging]
+level = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_subprocess = true  # Log external tool invocations (tmux, GitButler CLI, ttyd)
+log_api_requests = true  # Log API endpoint calls
+
+[status_polling]
+enabled = true
+interval = 5.0           # Poll every 5 seconds to verify status
+frozen_threshold = 300.0 # Warn if Claude busy > 5 minutes
+
+[notifications]
+enabled = true
+
+[status.idle]
+patterns = ['>\\s*$', 'claude>\\s*$']
+
+[status.waiting]
+patterns = ['\\(y/n\\)', 'Allow\\?', 'Continue\\?']
+```
+
+### Logging Configuration
+
+Chorus provides comprehensive logging for debugging, particularly useful when troubleshooting external tool interactions:
+
+**Log Levels** (`logging.level`):
+- `DEBUG`: Detailed information for diagnosing problems, includes all subprocess commands with full output
+- `INFO`: General informational messages (default)
+- `WARNING`: Warning messages for unexpected but handled situations
+- `ERROR`: Error messages for failures
+- `CRITICAL`: Critical failures
+
+**Subprocess Logging** (`logging.log_subprocess`):
+When enabled, logs all external tool invocations with:
+- Complete command line
+- Exit codes
+- stdout/stderr output (truncated for readability)
+- Execution timing
+
+Tools logged:
+- `tmux` commands (session management, input/output)
+- `but` GitButler CLI commands (stack operations, commits)
+- `ttyd` process management (web terminal)
+
+**API Request Logging** (`logging.log_api_requests`):
+When enabled, logs all HTTP requests with:
+- HTTP method and path
+- Response status codes
+- Error details
+
+**Debugging Example:**
+
+To debug tmux or GitButler issues:
+```toml
+[logging]
+level = "DEBUG"
+log_subprocess = true
+log_api_requests = false
+```
+
+This will show detailed command execution:
+```
+2025-12-30 10:15:23 - services.tmux - DEBUG - Executing: tmux new-session -d -s claude-task-1 -c /path/to/project
+2025-12-30 10:15:23 - services.tmux - DEBUG - Command succeeded: tmux new-session -d -s claude-task-1 -c /path/to/project
+2025-12-30 10:15:24 - services.gitbutler - INFO - Creating GitButler stack: task-1-feature
+2025-12-30 10:15:24 - services.gitbutler - DEBUG - Executing: but branch new task-1-feature -j
+2025-12-30 10:15:24 - services.gitbutler - DEBUG - Command succeeded: but branch new task-1-feature -j
+```
+
+### Environment Variables
+
 **CLAUDE_CODE_OAUTH_TOKEN** — Required for spawned Claude sessions to authenticate without interactive login. Generate with `claude setup-token`. See [Spawned Session Authentication](#spawned-session-authentication) for details.
+
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN=<token-from-setup-token>
+```
 
 ---
 
