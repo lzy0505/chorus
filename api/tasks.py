@@ -286,7 +286,7 @@ async def start_task(
 
     # 7. Start Claude in tmux with context injected via --append-system-prompt
     # Pass initial_prompt to send as a message (or default kickoff if None)
-    kickoff_message = request.initial_prompt or "Please read the task description and begin working on this task."
+    kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
     tmux.start_claude(task_id, initial_prompt=kickoff_message, context_file=context_file)
 
     return ActionResponse(
