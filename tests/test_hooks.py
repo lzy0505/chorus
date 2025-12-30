@@ -14,6 +14,9 @@ from services.hooks import (
     clear_hooks_config,
     get_chorus_url,
     get_hooks_config_dir,
+    get_global_config_dir,
+    get_global_config_path,
+    deep_merge_hooks,
 )
 
 
@@ -345,6 +348,206 @@ class TestClearHooksConfig:
         clear_hooks_config()
 
         assert not test_dir.exists()
+
+
+class TestGlobalConfigPaths:
+    """Tests for global config path functions."""
+
+    def test_get_global_config_dir(self):
+        """Test that global config dir points to ~/.claude/."""
+        config_dir = get_global_config_dir()
+        assert config_dir == Path.home() / ".claude"
+
+    def test_get_global_config_path(self):
+        """Test that global config path points to ~/.claude/settings.json."""
+        config_path = get_global_config_path()
+        assert config_path == Path.home() / ".claude" / "settings.json"
+
+
+class TestDeepMergeHooks:
+    """Tests for deep_merge_hooks function."""
+
+    def test_merge_empty_base(self):
+        """Test merging with empty base config."""
+        base = {}
+        overlay = {"hooks": {"SessionStart": [{"type": "command", "command": "test"}]}}
+
+        result = deep_merge_hooks(base, overlay)
+
+        assert result == overlay
+
+    def test_merge_empty_overlay(self):
+        """Test merging with empty overlay config."""
+        base = {"foo": "bar", "hooks": {"Custom": [{"type": "command"}]}}
+        overlay = {}
+
+        result = deep_merge_hooks(base, overlay)
+
+        assert result == base
+
+    def test_merge_hooks_appends(self):
+        """Test that hooks from overlay are appended to base hooks."""
+        base = {
+            "hooks": {
+                "SessionStart": [{"type": "command", "command": "existing"}]
+            }
+        }
+        overlay = {
+            "hooks": {
+                "SessionStart": [{"type": "command", "command": "new"}]
+            }
+        }
+
+        result = deep_merge_hooks(base, overlay)
+
+        # Both hooks should be present
+        assert len(result["hooks"]["SessionStart"]) == 2
+        assert result["hooks"]["SessionStart"][0]["command"] == "existing"
+        assert result["hooks"]["SessionStart"][1]["command"] == "new"
+
+    def test_merge_adds_new_events(self):
+        """Test that new hook events are added."""
+        base = {
+            "hooks": {
+                "SessionStart": [{"type": "command", "command": "existing"}]
+            }
+        }
+        overlay = {
+            "hooks": {
+                "Stop": [{"type": "command", "command": "new"}]
+            }
+        }
+
+        result = deep_merge_hooks(base, overlay)
+
+        assert "SessionStart" in result["hooks"]
+        assert "Stop" in result["hooks"]
+
+    def test_merge_preserves_non_hooks_settings(self):
+        """Test that non-hooks settings are preserved."""
+        base = {
+            "permissions": {"allow": ["Read", "Edit"]},
+            "model": "claude-sonnet",
+            "hooks": {}
+        }
+        overlay = {
+            "hooks": {"SessionStart": [{"type": "command"}]}
+        }
+
+        result = deep_merge_hooks(base, overlay)
+
+        assert result["permissions"] == {"allow": ["Read", "Edit"]}
+        assert result["model"] == "claude-sonnet"
+
+    def test_merge_nested_dicts(self):
+        """Test that nested dicts are recursively merged."""
+        base = {"nested": {"a": 1, "b": 2}}
+        overlay = {"nested": {"c": 3}}
+
+        result = deep_merge_hooks(base, overlay)
+
+        assert result["nested"] == {"a": 1, "b": 2, "c": 3}
+
+
+class TestEnsureHooksConfigWithGlobalConfig:
+    """Tests for ensure_hooks_config with global config merging."""
+
+    def test_copies_global_config_files(self, tmp_path, monkeypatch):
+        """Test that all files from global config are copied."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{"model": "opus"}')
+        (global_dir / "credentials.json").write_text('{"token": "secret"}')
+        (global_dir / "projects.json").write_text('{}')
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # All files should be copied
+        assert (test_dir / "credentials.json").exists()
+        assert (test_dir / "projects.json").exists()
+        assert json.loads((test_dir / "credentials.json").read_text()) == {"token": "secret"}
+
+    def test_merges_hooks_into_global_settings(self, tmp_path, monkeypatch):
+        """Test that Chorus hooks are merged into global settings."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text(json.dumps({
+            "model": "opus",
+            "permissions": {"allow": ["Read"]},
+            "hooks": {
+                "UserHook": [{"type": "command", "command": "user_cmd"}]
+            }
+        }))
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        settings = json.loads((test_dir / "settings.json").read_text())
+
+        # Global settings preserved
+        assert settings["model"] == "opus"
+        assert settings["permissions"] == {"allow": ["Read"]}
+
+        # User hook preserved
+        assert "UserHook" in settings["hooks"]
+
+        # Chorus hooks added
+        assert "SessionStart" in settings["hooks"]
+        assert "Stop" in settings["hooks"]
+
+    def test_force_regeneration(self, tmp_path, monkeypatch):
+        """Test that force=True regenerates the config."""
+        global_dir = tmp_path / "global_claude"
+        global_dir.mkdir()
+        (global_dir / "settings.json").write_text('{"model": "opus"}')
+
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+
+        # First call
+        ensure_hooks_config(chorus_url="http://first:8000")
+        first_content = (test_dir / "settings.json").read_text()
+        assert "http://first:8000" in first_content
+
+        # Update global config
+        (global_dir / "settings.json").write_text('{"model": "sonnet"}')
+
+        # Second call without force - should not change
+        ensure_hooks_config(chorus_url="http://second:9000")
+        assert (test_dir / "settings.json").read_text() == first_content
+
+        # Third call with force - should regenerate
+        ensure_hooks_config(chorus_url="http://third:7000", force=True)
+        new_content = (test_dir / "settings.json").read_text()
+        assert "http://third:7000" in new_content
+        assert "sonnet" in new_content
+
+    def test_works_without_global_config(self, tmp_path, monkeypatch):
+        """Test that config is created even without global config."""
+        global_dir = tmp_path / "nonexistent_claude"  # Doesn't exist
+        test_dir = tmp_path / "chorus" / "hooks" / ".claude"
+
+        monkeypatch.setattr("services.hooks.get_hooks_config_dir", lambda: test_dir)
+        monkeypatch.setattr("services.hooks.get_global_config_dir", lambda: global_dir)
+
+        ensure_hooks_config(chorus_url="http://localhost:8000")
+
+        # Should still create valid config
+        assert test_dir.exists()
+        settings = json.loads((test_dir / "settings.json").read_text())
+        assert "hooks" in settings
+        assert "SessionStart" in settings["hooks"]
 
 
 class TestHooksService:
