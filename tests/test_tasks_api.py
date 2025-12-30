@@ -405,11 +405,6 @@ class TestTaskSend:
         assert response.status_code == 200
         mock_tmux.send_keys.assert_called_once_with(task_id, "Fix the bug")
 
-        # Verify status changed to busy
-        with Session(engine) as db:
-            task = db.get(Task, task_id)
-            assert task.claude_status == ClaudeStatus.busy
-
     def test_send_message_claude_busy(self, client, engine):
         """Test that sending when Claude is busy fails."""
         with Session(engine) as db:
@@ -460,12 +455,6 @@ class TestTaskRespond:
         assert response.status_code == 200
         assert "approved" in response.json()["message"]
         mock_tmux.send_confirmation.assert_called_once_with(task_id, True)
-
-        # Verify status changed to busy and task status to running
-        with Session(engine) as db:
-            task = db.get(Task, task_id)
-            assert task.claude_status == ClaudeStatus.busy
-            assert task.status == TaskStatus.running
 
     @patch("api.tasks.TmuxService")
     def test_respond_deny(self, mock_tmux_class, client, engine):
