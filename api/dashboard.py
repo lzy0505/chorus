@@ -256,6 +256,4 @@ async def respond_to_permission(
     db.commit()
     db.refresh(task)
 
-    return templates.TemplateResponse(
-        request, "partials/task_detail.html", {"task": task}
-    )
+    return _render_task_with_oob(request, task)
