@@ -71,14 +71,14 @@ def get_chorus_url() -> str:
     return f"http://{config.server.host}:{config.server.port}"
 
 
-def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dict:
-    """Generate Claude Code hooks configuration for a task.
+def generate_hooks_config(chorus_url: Optional[str] = None) -> dict:
+    """Generate Claude Code hooks configuration.
 
     This creates the hooks section for .claude/settings.json that will
-    POST events to the Chorus API.
+    POST events to the Chorus API. The config is task-agnostic - the API
+    uses session_id from the payload to find the associated task.
 
     Args:
-        task_id: The task ID to associate with hook events.
         chorus_url: Override the Chorus API URL (for testing).
 
     Returns:
@@ -118,7 +118,6 @@ def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dic
 
 
 def generate_hooks_config_with_handler(
-    task_id: int,
     handler_path: str,
     chorus_url: Optional[str] = None,
 ) -> dict:
@@ -128,7 +127,6 @@ def generate_hooks_config_with_handler(
     dedicated handler script for better error handling.
 
     Args:
-        task_id: The task ID to associate with hook events.
         handler_path: Path to the hook handler script.
         chorus_url: Override the Chorus API URL (for testing).
 
@@ -137,8 +135,8 @@ def generate_hooks_config_with_handler(
     """
     url = chorus_url or get_chorus_url()
 
-    # Handler script receives JSON via stdin, task_id and url as env vars
-    command = f"CHORUS_URL={url} CHORUS_TASK_ID={task_id} python {handler_path}"
+    # Handler script receives JSON via stdin, url as env var
+    command = f"CHORUS_URL={url} python {handler_path}"
 
     # Events that don't need a matcher - use simple format
     no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]

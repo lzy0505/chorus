@@ -209,7 +209,7 @@ class TestTaskStart:
         # Verify services were called
         mock_gb.create_stack.assert_called_once()
         mock_tmux.create_task_session.assert_called_once_with(task_id)
-        mock_hooks.setup_hooks.assert_called_once_with(task_id)
+        mock_hooks.ensure_hooks.assert_called_once()
         mock_tmux.start_claude.assert_called_once()
 
         # Verify task was updated
@@ -492,17 +492,13 @@ class TestTaskRespond:
 class TestTaskComplete:
     """Tests for POST /api/tasks/{id}/complete endpoint."""
 
-    @patch("api.tasks.HooksService")
     @patch("api.tasks.TmuxService")
     def test_complete_task_success(
-        self, mock_tmux_class, mock_hooks_class, client, engine
+        self, mock_tmux_class, client, engine
     ):
         """Test completing a running task."""
         mock_tmux = MagicMock()
         mock_tmux_class.return_value = mock_tmux
-
-        mock_hooks = MagicMock()
-        mock_hooks_class.return_value = mock_hooks
 
         with Session(engine) as db:
             task = Task(
@@ -523,7 +519,6 @@ class TestTaskComplete:
         assert response.status_code == 200
 
         mock_tmux.kill_task_session.assert_called_once_with(task_id)
-        mock_hooks.teardown_hooks.assert_called_once()
 
         with Session(engine) as db:
             task = db.get(Task, task_id)

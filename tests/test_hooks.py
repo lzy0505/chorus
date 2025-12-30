@@ -114,7 +114,7 @@ class TestGenerateHooksConfig:
 
     def test_generates_all_hook_types(self):
         """Test that all required hook types are generated."""
-        config = generate_hooks_config(task_id=1, chorus_url="http://localhost:8000")
+        config = generate_hooks_config(chorus_url="http://localhost:8000")
 
         assert "hooks" in config
         hooks = config["hooks"]
@@ -128,7 +128,7 @@ class TestGenerateHooksConfig:
 
     def test_hook_structure(self):
         """Test the structure of each hook entry."""
-        config = generate_hooks_config(task_id=1, chorus_url="http://localhost:8000")
+        config = generate_hooks_config(chorus_url="http://localhost:8000")
 
         # No-matcher events use simple format
         no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
@@ -153,7 +153,7 @@ class TestGenerateHooksConfig:
 
     def test_command_contains_url(self):
         """Test that hook commands contain the Chorus URL."""
-        config = generate_hooks_config(task_id=42, chorus_url="http://test:9000")
+        config = generate_hooks_config(chorus_url="http://test:9000")
 
         no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
 
@@ -167,7 +167,7 @@ class TestGenerateHooksConfig:
 
     def test_command_posts_to_correct_endpoint(self):
         """Test that commands POST to the correct API endpoints."""
-        config = generate_hooks_config(task_id=1, chorus_url="http://localhost:8000")
+        config = generate_hooks_config(chorus_url="http://localhost:8000")
 
         # Each hook should POST to /api/hooks/{event_name_lower}
         session_start_cmd = config["hooks"]["SessionStart"][0]["command"]
@@ -180,7 +180,6 @@ class TestGenerateHooksConfigWithHandler:
     def test_uses_handler_script(self):
         """Test that handler script path is included in command."""
         config = generate_hooks_config_with_handler(
-            task_id=1,
             handler_path="/path/to/handler.py",
             chorus_url="http://localhost:8000",
         )

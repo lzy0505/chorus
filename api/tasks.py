@@ -260,8 +260,8 @@ async def start_task(
         # Session already exists
         task.tmux_session = tmux.get_session_id(task_id)
 
-    # 3. Set up hooks
-    hooks.setup_hooks(task_id)
+    # 3. Ensure hooks config exists (shared across all sessions)
+    hooks.ensure_hooks()
 
     # 4. Update task status
     task.status = TaskStatus.running
@@ -488,7 +488,6 @@ async def fail_task(
         )
 
     tmux = TmuxService()
-    hooks = HooksService()
     gitbutler = GitButlerService()
 
     # Kill tmux session if it exists
