@@ -263,7 +263,7 @@ class TestGitButlerServiceStackExists:
             args=["but", "status", "-j"],
             returncode=0,
             stdout=json.dumps({
-                "stacks": [{"name": "my-stack", "cliId": "s1"}],
+                "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "my-stack", "cliId": "s1", "commits": []}]}],
                 "unassignedChanges": [],
             }),
             stderr="",
@@ -349,7 +349,7 @@ class TestGitButlerServiceCreateStack:
             args=["but", "status", "-j"],
             returncode=0,
             stdout=json.dumps({
-                "stacks": [{"name": "existing", "cliId": "s1"}],
+                "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "existing", "cliId": "s1", "commits": []}]}],
                 "unassignedChanges": [],
             }),
             stderr="",
@@ -400,7 +400,7 @@ class TestGitButlerServiceDeleteStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "to-delete", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "to-delete", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -446,7 +446,7 @@ class TestGitButlerServiceDeleteStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -478,7 +478,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "my-stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "my-stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -513,7 +513,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -542,7 +542,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -636,7 +636,7 @@ class TestGitButlerServiceCommitToStack:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -669,7 +669,7 @@ class TestGitButlerServiceGetStackCommits:
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({
-                    "stacks": [{"name": "stack", "cliId": "s1"}],
+                    "stacks": [{"cliId": "s1", "assignedChanges": [], "branches": [{"name": "stack", "cliId": "s1", "commits": []}]}],
                     "unassignedChanges": [],
                 }),
                 stderr="",
@@ -799,8 +799,8 @@ class TestGitButlerServiceGetStackByName:
             returncode=0,
             stdout=json.dumps({
                 "stacks": [
-                    {"name": "target", "cliId": "s1"},
-                    {"name": "other", "cliId": "s2"},
+                    {"cliId": "s1", "assignedChanges": [], "branches": [{"name": "target", "cliId": "s1", "commits": []}]},
+                    {"cliId": "s2", "assignedChanges": [], "branches": [{"name": "other", "cliId": "s2", "commits": []}]},
                 ],
                 "unassignedChanges": [],
             }),
