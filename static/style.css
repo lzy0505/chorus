@@ -92,6 +92,12 @@ h1 {
     min-height: 200px;
 }
 
+.detail-panel,
+.task-panel {
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+}
+
 .panel-header {
     display: flex;
     justify-content: space-between;
@@ -282,6 +288,8 @@ h1 {
 /* Terminal */
 .terminal-section {
     margin-top: 1rem;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .terminal-header {
@@ -301,8 +309,10 @@ h1 {
     font-family: 'Monaco', 'Menlo', monospace;
     font-size: 0.75rem;
     line-height: 1.4;
+    height: 300px;
     max-height: 300px;
     overflow-y: auto;
+    overflow-x: hidden;
     white-space: pre-wrap;
     word-break: break-all;
 }
