@@ -24,9 +24,10 @@
   - [x] `send_keys(task_id, text)` - Send input to Claude
 
 - [x] `services/hooks.py` - Claude Code hooks integration ✅
-  - [x] `generate_hooks_config(task_id)` - Generate .claude/settings.json for task
+  - [x] `generate_hooks_config()` - Generate shared .claude/settings.json (task-agnostic)
+  - [x] `ensure_hooks_config()` - Idempotent setup in `/tmp/chorus/hooks/.claude/`
   - [x] `HookPayload` dataclass for parsing hook events
-  - [x] `HooksService` class for setup/teardown
+  - [x] `HooksService` class for hook management
   - [x] Session-to-task mapping via `claude_session_id`
 
 - [x] `api/hooks.py` - Hook event endpoints ✅
@@ -118,6 +119,19 @@ Benefits:
 - Deterministic events (no fragile pattern matching)
 - Lower resource usage
 - Access to session metadata (transcript_path, session_id)
+
+### Architecture Decision: Shared Hooks Config (2025-12-30)
+Changed from per-task hooks to shared project-level hooks:
+- **Before**: Each task had its own `/tmp/chorus/task-{id}/.claude/settings.json`
+- **After**: All sessions share `/tmp/chorus/hooks/.claude/settings.json`
+
+Key insight: Hooks config is task-agnostic — it just forwards events to the Chorus API with `session_id`. The API looks up tasks by `session_id`, not by config location.
+
+Benefits:
+- Simpler: Single config for all sessions
+- Idempotent: `ensure_hooks()` only writes if missing
+- No cleanup needed: Task completion doesn't delete shared config
+- Same isolation: Still outside project directory (`/tmp/chorus/hooks/`)
 
 ### Architecture Decision: Task-Centric (2025-12-29)
 Changed from session-centric to task-centric design:
