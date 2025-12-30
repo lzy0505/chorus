@@ -295,7 +295,7 @@ class TestGitButlerServiceCreateStack:
         """Test creating a new stack."""
         # First call: status check (stack doesn't exist)
         # Second call: create stack
-        # Third call: status check (to return the stack)
+        # Third call: status check (to return the created stack)
         mock_run.side_effect = [
             CompletedProcess(
                 args=["but", "status", "-j"],
@@ -306,7 +306,20 @@ class TestGitButlerServiceCreateStack:
             CompletedProcess(
                 args=["but", "branch", "new", "task-1", "-j"],
                 returncode=0,
-                stdout=json.dumps({"name": "task-1", "cliId": "s1"}),
+                stdout=json.dumps({"branch": "task-1"}),
+                stderr="",
+            ),
+            CompletedProcess(
+                args=["but", "status", "-j"],
+                returncode=0,
+                stdout=json.dumps({
+                    "stacks": [{
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "task-1", "cliId": "s1", "commits": []}]
+                    }],
+                    "unassignedChanges": []
+                }),
                 stderr="",
             ),
         ]
@@ -554,14 +567,14 @@ class TestGitButlerServiceCommitToStack:
     def test_commit_to_stack_create_if_missing(self, mock_run):
         """Test auto-creating stack when missing."""
         mock_run.side_effect = [
-            # First status check - stack doesn't exist
+            # First status check - commit_to_stack's stack_exists call
             CompletedProcess(
                 args=["but", "status", "-j"],
                 returncode=0,
                 stdout=json.dumps({"stacks": [], "unassignedChanges": []}),
                 stderr="",
             ),
-            # Create stack status check
+            # Second status check - create_stack's stack_exists call
             CompletedProcess(
                 args=["but", "status", "-j"],
                 returncode=0,
@@ -572,7 +585,21 @@ class TestGitButlerServiceCommitToStack:
             CompletedProcess(
                 args=["but", "branch", "new", "new-stack", "-j"],
                 returncode=0,
-                stdout=json.dumps({"name": "new-stack", "cliId": "s1"}),
+                stdout=json.dumps({"branch": "new-stack"}),
+                stderr="",
+            ),
+            # Get status after create to fetch the created stack
+            CompletedProcess(
+                args=["but", "status", "-j"],
+                returncode=0,
+                stdout=json.dumps({
+                    "stacks": [{
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "new-stack", "cliId": "s1", "commits": []}]
+                    }],
+                    "unassignedChanges": []
+                }),
                 stderr="",
             ),
             # Commit
