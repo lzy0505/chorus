@@ -1,11 +1,4 @@
-<!-- Auto-refresh wrapper for running/waiting tasks -->
-<div id="task-detail-content"
-     {% if task.status.value in ['running', 'waiting'] %}
-     hx-get="/dashboard/tasks/{{ task.id }}"
-     hx-trigger="every 3s"
-     hx-target="#task-detail"
-     hx-swap="innerHTML"
-     {% endif %}>
+<div id="task-detail-content">
 
 <div class="panel-header">
     <span>{{ task.title }}</span>
