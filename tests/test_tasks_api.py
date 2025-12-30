@@ -253,8 +253,10 @@ class TestTaskStart:
         )
 
         assert response.status_code == 200
+        # Context is now written to file and passed via context_file parameter
+        from pathlib import Path
         mock_tmux.start_claude.assert_called_once_with(
-            task_id, initial_prompt="Fix the login bug"
+            task_id, context_file=Path(f"/tmp/chorus/task-{task_id}/context.md")
         )
 
     def test_start_task_not_pending(self, client, engine):
@@ -318,7 +320,11 @@ class TestTaskRestartClaude:
         data = response.json()
         assert "restart #3" in data["message"]
 
-        mock_tmux.restart_claude.assert_called_once_with(task_id)
+        # Context file path is passed to restart_claude
+        from pathlib import Path
+        mock_tmux.restart_claude.assert_called_once_with(
+            task_id, context_file=Path(f"/tmp/chorus/task-{task_id}/context.md")
+        )
 
         with Session(engine) as db:
             task = db.get(Task, task_id)

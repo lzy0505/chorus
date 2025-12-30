@@ -7,6 +7,7 @@ The tmux session persists even if Claude crashes/hangs, allowing restarts.
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from config import get_config
@@ -121,13 +122,20 @@ class TmuxService:
         return session_id
 
     def start_claude(
-        self, task_id: int, initial_prompt: Optional[str] = None
+        self,
+        task_id: int,
+        initial_prompt: Optional[str] = None,
+        context_file: Optional[Path] = None,
     ) -> None:
         """Start Claude Code in the task's tmux session.
 
         Args:
             task_id: The task ID.
             initial_prompt: Optional prompt to send after Claude starts.
+            context_file: Optional path to context file for --append-system-prompt.
+                         Context is injected into Claude's system prompt at startup.
+                         The file should be in /tmp/chorus/task-{id}/ to avoid
+                         polluting the working directory.
 
         Raises:
             SessionNotFoundError: If the tmux session doesn't exist.
@@ -137,8 +145,16 @@ class TmuxService:
         if not session_exists(session_id):
             raise SessionNotFoundError(f"Session {session_id} not found")
 
+        # Build the claude command
+        if context_file and context_file.exists():
+            # Use --append-system-prompt to inject task context
+            # The context becomes part of Claude's system prompt for the entire session
+            claude_cmd = f'claude --append-system-prompt "$(cat {context_file})"'
+        else:
+            claude_cmd = "claude"
+
         # Send the claude command
-        _run_tmux(["send-keys", "-t", session_id, "claude", "Enter"])
+        _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
 
         # If there's an initial prompt, wait a bit for Claude to start
         # then send the prompt
@@ -146,13 +162,17 @@ class TmuxService:
             time.sleep(0.5)  # Give Claude time to initialize
             self.send_keys(task_id, initial_prompt)
 
-    def restart_claude(self, task_id: int) -> None:
+    def restart_claude(
+        self, task_id: int, context_file: Optional[Path] = None
+    ) -> None:
         """Restart Claude in the task's tmux session.
 
         Sends Ctrl-C to interrupt, then relaunches Claude.
+        If context_file is provided, re-injects the task context.
 
         Args:
             task_id: The task ID.
+            context_file: Optional path to context file for --append-system-prompt.
 
         Raises:
             SessionNotFoundError: If the tmux session doesn't exist.
@@ -170,8 +190,14 @@ class TmuxService:
         _run_tmux(["send-keys", "-t", session_id, "C-c"])
         time.sleep(0.3)
 
+        # Build the claude command (same logic as start_claude)
+        if context_file and context_file.exists():
+            claude_cmd = f'claude --append-system-prompt "$(cat {context_file})"'
+        else:
+            claude_cmd = "claude"
+
         # Start Claude again
-        _run_tmux(["send-keys", "-t", session_id, "claude", "Enter"])
+        _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
 
     def kill_task_session(self, task_id: int) -> None:
         """Kill the tmux session for a task.
