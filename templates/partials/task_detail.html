@@ -107,36 +107,23 @@
     {% endif %}
 </div>
 
-<!-- Terminal Output (for running tasks) -->
+<!-- Terminal (for running tasks) -->
 {% if task.status.value in ['running', 'waiting'] %}
 <div class="terminal-section">
     <div class="terminal-header">
-        <span>Terminal Output</span>
-        <button class="btn btn-small"
-                hx-get="/dashboard/tasks/{{ task.id }}/output"
-                hx-target="#terminal-output"
-                hx-swap="innerHTML">
-            Refresh
-        </button>
+        <span>Terminal</span>
+        <a href="http://localhost:{{ 7681 + task.id }}" target="_blank" class="btn btn-small">
+            Open in New Tab
+        </a>
     </div>
-    <pre id="terminal-output" class="terminal"
-         hx-get="/dashboard/tasks/{{ task.id }}/output"
-         hx-trigger="load delay:500ms, every 5s"
-         hx-target="this"
-         hx-swap="innerHTML">Loading...</pre>
+    <iframe
+        id="terminal-iframe-{{ task.id }}"
+        hx-preserve="true"
+        src="http://localhost:{{ 7681 + task.id }}"
+        class="terminal-iframe"
+        title="Task Terminal">
+    </iframe>
 </div>
-
-<!-- Send Message -->
-{% if task.claude_status.value == 'idle' %}
-<form class="send-form"
-      hx-post="/dashboard/tasks/{{ task.id }}/send"
-      hx-target="#terminal-output"
-      hx-swap="innerHTML"
-      hx-on::after-request="this.reset()">
-    <input type="text" name="message" placeholder="Send message to Claude..." class="message-input">
-    <button type="submit" class="btn btn-primary">Send</button>
-</form>
-{% endif %}
 {% endif %}
 
 </div><!-- end task-detail-content -->

@@ -16,7 +16,22 @@ A lightweight orchestration system for managing multiple Claude Code sessions wo
 - Python 3.11+
 - tmux
 - GitButler CLI (`but`) — for stack management and auto-commits
+- ttyd (optional) — for web-based terminal access
 - uv (recommended) or pip
+
+### Installing ttyd (optional)
+
+ttyd provides interactive web terminal access to task sessions:
+
+```bash
+# macOS
+brew install ttyd
+
+# Linux (Debian/Ubuntu)
+apt install ttyd
+```
+
+Without ttyd, tasks still work but won't have web terminal access.
 
 ## Quick Start
 
