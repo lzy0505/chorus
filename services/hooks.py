@@ -168,25 +168,26 @@ def generate_hooks_config(chorus_url: Optional[str] = None) -> dict:
         f"r.urlopen(r.Request('{url}/api/hooks/' + d['hook_event_name'].lower(), " \
         "json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
 
-    # Events that don't need a matcher - use simple format
-    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools) - use nested format
-    matcher_events = ["PermissionRequest", "PostToolUse"]
-
+    # All hook events use the nested format with matcher and hooks array.
+    # Events like SessionStart/Stop/SessionEnd use empty matcher "" to match all.
+    # Events like PermissionRequest/PostToolUse use "*" to match all tools.
     hooks_config: dict = {"hooks": {}}
 
-    for event in no_matcher_events:
+    # Session lifecycle events - empty matcher matches everything
+    for event in ["SessionStart", "Stop", "SessionEnd"]:
         hooks_config["hooks"][event] = [
-            {"type": "command", "command": handler_script}
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": handler_script}]
+            }
         ]
 
-    for event in matcher_events:
+    # Tool-related events - "*" matcher matches all tools
+    for event in ["PermissionRequest", "PostToolUse"]:
         hooks_config["hooks"][event] = [
             {
                 "matcher": "*",
-                "hooks": [
-                    {"type": "command", "command": handler_script}
-                ]
+                "hooks": [{"type": "command", "command": handler_script}]
             }
         ]
 
@@ -214,21 +215,25 @@ def generate_hooks_config_with_handler(
     # Handler script receives JSON via stdin, url as env var
     command = f"CHORUS_URL={url} python {handler_path}"
 
-    # Events that don't need a matcher - use simple format
-    no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-    # Events that need a matcher (use "*" for all tools) - use nested format
-    matcher_events = ["PermissionRequest", "PostToolUse"]
-
+    # All hook events use the nested format with matcher and hooks array.
     hooks_config: dict = {"hooks": {}}
 
-    for event in no_matcher_events:
+    # Session lifecycle events - empty matcher matches everything
+    for event in ["SessionStart", "Stop", "SessionEnd"]:
         hooks_config["hooks"][event] = [
-            {"type": "command", "command": command}
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": command}]
+            }
         ]
 
-    for event in matcher_events:
+    # Tool-related events - "*" matcher matches all tools
+    for event in ["PermissionRequest", "PostToolUse"]:
         hooks_config["hooks"][event] = [
-            {"matcher": "*", "hooks": [{"type": "command", "command": command}]}
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": command}]
+            }
         ]
 
     return hooks_config
@@ -286,9 +291,7 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     else:
         config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy credentials file (~/.claude.json) to the config directory
-    # Claude expects .claude.json inside CLAUDE_CONFIG_DIR (contains oauthAccount)
-    global_creds = get_global_credentials_path()
+    # Copy credentials again after copytree (in case it was overwritten)
     if global_creds.exists():
         target_creds = config_dir / ".claude.json"
         shutil.copy2(global_creds, target_creds)

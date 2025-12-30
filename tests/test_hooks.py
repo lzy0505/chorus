@@ -143,29 +143,25 @@ class TestGenerateHooksConfig:
             assert len(hook_list) == 1
 
             hook = hook_list[0]
+            # All events now use nested format: {"matcher": "...", "hooks": [...]}
+            assert "matcher" in hook
+            assert "hooks" in hook
+            assert hook["hooks"][0]["type"] == "command"
+            assert "command" in hook["hooks"][0]
+            # Session lifecycle events use empty matcher, tool events use "*"
             if hook_name in no_matcher_events:
-                # Simple format: {"type": "command", "command": "..."}
-                assert hook["type"] == "command"
-                assert "command" in hook
+                assert hook["matcher"] == ""
             else:
-                # Nested format: {"matcher": "*", "hooks": [...]}
-                assert "matcher" in hook
-                assert "hooks" in hook
-                assert hook["hooks"][0]["type"] == "command"
-                assert "command" in hook["hooks"][0]
+                assert hook["matcher"] == "*"
 
     def test_command_contains_url(self):
         """Test that hook commands contain the Chorus URL."""
         config = generate_hooks_config(chorus_url="http://test:9000")
 
-        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-
         for hook_name, hook_list in config["hooks"].items():
             hook = hook_list[0]
-            if hook_name in no_matcher_events:
-                command = hook["command"]
-            else:
-                command = hook["hooks"][0]["command"]
+            # All events now use nested format
+            command = hook["hooks"][0]["command"]
             assert "http://test:9000" in command
 
     def test_command_posts_to_correct_endpoint(self):
@@ -173,7 +169,8 @@ class TestGenerateHooksConfig:
         config = generate_hooks_config(chorus_url="http://localhost:8000")
 
         # Each hook should POST to /api/hooks/{event_name_lower}
-        session_start_cmd = config["hooks"]["SessionStart"][0]["command"]
+        # All events now use nested format
+        session_start_cmd = config["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         assert "/api/hooks/" in session_start_cmd
 
 
@@ -187,14 +184,10 @@ class TestGenerateHooksConfigWithHandler:
             chorus_url="http://localhost:8000",
         )
 
-        no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
-
         for hook_name, hook_list in config["hooks"].items():
             hook = hook_list[0]
-            if hook_name in no_matcher_events:
-                command = hook["command"]
-            else:
-                command = hook["hooks"][0]["command"]
+            # All events now use nested format
+            command = hook["hooks"][0]["command"]
             assert "/path/to/handler.py" in command
 
     def test_sets_environment_variables(self):
@@ -204,7 +197,8 @@ class TestGenerateHooksConfigWithHandler:
             chorus_url="http://test:9000",
         )
 
-        command = config["hooks"]["Stop"][0]["command"]
+        # All events now use nested format
+        command = config["hooks"]["Stop"][0]["hooks"][0]["command"]
         assert "CHORUS_URL=http://test:9000" in command
 
 
