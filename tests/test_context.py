@@ -39,6 +39,7 @@ class TestBuildTaskContext:
         task = Task(id=1, title="Fix login bug")
         context = build_task_context(task)
 
+        assert "HIGHEST PRIORITY TASK" in context
         assert "# Current Task: Fix login bug" in context
         assert "Task ID: 1" in context
 
@@ -54,8 +55,8 @@ class TestBuildTaskContext:
         assert "## Description" in context
         assert "Users cannot login after password reset" in context
 
-    def test_context_with_stack(self):
-        """Test context includes GitButler stack info."""
+    def test_context_without_gitbutler_info(self):
+        """Test context excludes GitButler stack info (Chorus handles this)."""
         task = Task(
             id=1,
             title="Fix login bug",
@@ -63,10 +64,12 @@ class TestBuildTaskContext:
         )
         context = build_task_context(task)
 
-        assert "GitButler Stack: `task-1-fix-login-bug`" in context
-        assert "## Git Workflow" in context
-        assert "but commit -c task-1-fix-login-bug" in context
-        assert "Do NOT use `git commit` directly" in context
+        # GitButler info should NOT be in the context
+        assert "GitButler Stack" not in context
+        assert "## Git Workflow" not in context
+        assert "but commit" not in context
+        # But priority should be emphasized
+        assert "HIGHEST PRIORITY TASK" in context
 
     def test_context_with_user_prompt(self):
         """Test context includes user-provided prompt."""
@@ -86,11 +89,13 @@ class TestBuildTaskContext:
         )
         context = build_task_context(task, user_prompt="Start with CSS variables")
 
+        assert "HIGHEST PRIORITY TASK" in context
         assert "# Current Task: Add dark mode" in context
         assert "Task ID: 5" in context
         assert "Implement dark mode toggle in settings" in context
-        assert "task-5-add-dark-mode" in context
         assert "Start with CSS variables" in context
+        # GitButler info should not be included
+        assert "task-5-add-dark-mode" not in context
 
 
 class TestWriteTaskContext:

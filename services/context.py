@@ -39,27 +39,19 @@ def build_task_context(task: Task, user_prompt: Optional[str] = None) -> str:
     """
     sections = []
 
+    # Priority emphasis
+    sections.append("🔴 **HIGHEST PRIORITY TASK**")
+    sections.append("")
+
     # Task header
     sections.append(f"# Current Task: {task.title}")
     sections.append(f"Task ID: {task.id}")
-
-    if task.stack_name:
-        sections.append(f"GitButler Stack: `{task.stack_name}`")
-
     sections.append("")  # Blank line
 
     # Task description
     if task.description:
         sections.append("## Description")
         sections.append(task.description)
-        sections.append("")
-
-    # GitButler instructions
-    if task.stack_name:
-        sections.append("## Git Workflow")
-        sections.append(f"- All changes for this task should be committed to stack: `{task.stack_name}`")
-        sections.append(f"- Use `but commit -c {task.stack_name}` to commit changes")
-        sections.append("- Do NOT use `git commit` directly")
         sections.append("")
 
     # User prompt / additional instructions
