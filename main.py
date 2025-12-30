@@ -60,18 +60,19 @@ async def lifespan(app: FastAPI):
     _ensure_config()
     create_db_and_tables()
 
-    # Start status poller (optional - uncomment to enable)
-    # from services.status_poller import get_status_poller
-    # poller = get_status_poller(interval=2.0)
-    # poller.start()
-    # logger.info("Status poller started")
+    # Start status poller in hybrid mode
+    # Hooks provide fast updates, poller acts as safety net (every 5s)
+    from services.status_poller import get_status_poller
+    poller = get_status_poller(interval=5.0)
+    poller.start()
+    logger.info("Status poller started in hybrid mode (interval: 5.0s)")
 
     yield
 
     # Shutdown
-    # if poller:
-    #     await poller.stop()
-    #     logger.info("Status poller stopped")
+    await poller.stop()
+    stats = poller.get_stats()
+    logger.info(f"Status poller stopped. Corrections made: {stats['correction_count']}")
     pass
 
 

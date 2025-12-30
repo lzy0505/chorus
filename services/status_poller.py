@@ -2,15 +2,20 @@
 
 Periodically checks Claude's actual status by analyzing terminal output,
 updating the database when status changes are detected.
+
+This service works in hybrid mode with hooks:
+- Hooks provide fast, event-driven updates (SessionStart, Stop, PermissionRequest)
+- Polling provides a safety net, catching missed hooks or drift (every 5-10s)
 """
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
 
-from database import engine
+from database import get_engine
 from models import Task, TaskStatus, ClaudeStatus
 from services.status_detector import StatusDetector
 
@@ -28,20 +33,26 @@ class StatusPoller:
     where hooks might be missed or delayed.
     """
 
-    def __init__(self, interval: float = 2.0):
+    def __init__(self, interval: float = 5.0, engine=None):
         """Initialize the status poller.
 
         Args:
-            interval: Polling interval in seconds (default: 2.0)
+            interval: Polling interval in seconds (default: 5.0)
+                     Longer intervals are appropriate for hybrid mode where
+                     hooks provide fast updates and polling is a safety net.
+            engine: Optional database engine (for testing)
         """
         self.interval = interval
         self.detector = StatusDetector()
+        self.engine = engine  # If None, will use get_engine()
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self._correction_count = 0  # Track how often poller corrects hook status
 
     async def _poll_once(self) -> None:
         """Poll status for all running tasks once."""
         try:
+            engine = self.engine if self.engine is not None else get_engine()
             with Session(engine) as db:
                 # Get all tasks that might need status updates
                 statement = select(Task).where(
@@ -61,11 +72,13 @@ class StatusPoller:
                     if detected_status is None:
                         continue
 
-                    # Update if status changed
+                    # Update if status changed (poller correcting hook-based status)
                     if detected_status != task.claude_status:
-                        logger.info(
-                            f"Task {task.id}: Status changed from "
-                            f"{task.claude_status} to {detected_status} (detected)"
+                        self._correction_count += 1
+                        logger.warning(
+                            f"Task {task.id}: Status correction by poller - "
+                            f"{task.claude_status} → {detected_status} "
+                            f"(correction #{self._correction_count})"
                         )
                         task.claude_status = detected_status
 
@@ -75,6 +88,9 @@ class StatusPoller:
                         elif task.status == TaskStatus.waiting and detected_status == ClaudeStatus.idle:
                             # Claude finished responding to permission
                             task.status = TaskStatus.running
+                        elif detected_status == ClaudeStatus.busy and task.status == TaskStatus.running:
+                            # Ensure task status matches busy state
+                            pass  # Already running, no change needed
 
                         db.add(task)
 
@@ -127,6 +143,18 @@ class StatusPoller:
         Useful for testing or forcing an immediate update.
         """
         await self._poll_once()
+
+    def get_stats(self) -> dict:
+        """Get polling statistics.
+
+        Returns:
+            Dict with polling stats (corrections, running state, etc.)
+        """
+        return {
+            "running": self._running,
+            "interval": self.interval,
+            "correction_count": self._correction_count,
+        }
 
 
 # Global poller instance
