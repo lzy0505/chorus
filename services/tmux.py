@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from config import get_config
+from services.hooks import get_hooks_config_dir
 
 
 class TmuxError(Exception):
@@ -145,13 +146,19 @@ class TmuxService:
         if not session_exists(session_id):
             raise SessionNotFoundError(f"Session {session_id} not found")
 
-        # Build the claude command
+        # Get shared config directory for hooks
+        # This keeps hooks out of the hosted project's .claude/ directory
+        config_dir = get_hooks_config_dir()
+
+        # Build the claude command with isolated config
+        env_prefix = f'CLAUDE_CONFIG_DIR="{config_dir}"'
+
         if context_file and context_file.exists():
             # Use --append-system-prompt to inject task context
             # The context becomes part of Claude's system prompt for the entire session
-            claude_cmd = f'claude --append-system-prompt "$(cat {context_file})"'
+            claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})"'
         else:
-            claude_cmd = "claude"
+            claude_cmd = f"{env_prefix} claude"
 
         # Send the claude command
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
@@ -190,11 +197,16 @@ class TmuxService:
         _run_tmux(["send-keys", "-t", session_id, "C-c"])
         time.sleep(0.3)
 
-        # Build the claude command (same logic as start_claude)
+        # Get shared config directory for hooks
+        config_dir = get_hooks_config_dir()
+
+        # Build the claude command with isolated config (same logic as start_claude)
+        env_prefix = f'CLAUDE_CONFIG_DIR="{config_dir}"'
+
         if context_file and context_file.exists():
-            claude_cmd = f'claude --append-system-prompt "$(cat {context_file})"'
+            claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})"'
         else:
-            claude_cmd = "claude"
+            claude_cmd = f"{env_prefix} claude"
 
         # Start Claude again
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])

@@ -9,14 +9,31 @@ Hook events used:
 - Stop: Claude finishes responding → idle status
 - PermissionRequest: Permission dialog shown → waiting status
 - SessionEnd: Claude exits → stopped status
+
+Isolation:
+Hooks are written to /tmp/chorus/hooks/.claude/ to avoid polluting
+the hosted project's working directory. All Claude sessions share the
+same hooks config since it contains no task-specific data. Claude Code
+is launched with CLAUDE_CONFIG_DIR pointing to this shared location.
 """
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from config import get_config
+
+
+def get_hooks_config_dir() -> Path:
+    """Get shared config directory for all Claude sessions.
+
+    Returns /tmp/chorus/hooks/.claude/
+    This keeps hooks isolated from the hosted project while allowing
+    all sessions to share the same configuration.
+    """
+    return Path("/tmp/chorus/hooks/.claude")
 
 
 @dataclass
@@ -54,14 +71,14 @@ def get_chorus_url() -> str:
     return f"http://{config.server.host}:{config.server.port}"
 
 
-def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dict:
-    """Generate Claude Code hooks configuration for a task.
+def generate_hooks_config(chorus_url: Optional[str] = None) -> dict:
+    """Generate Claude Code hooks configuration.
 
     This creates the hooks section for .claude/settings.json that will
-    POST events to the Chorus API.
+    POST events to the Chorus API. The config is task-agnostic - the API
+    uses session_id from the payload to find the associated task.
 
     Args:
-        task_id: The task ID to associate with hook events.
         chorus_url: Override the Chorus API URL (for testing).
 
     Returns:
@@ -101,7 +118,6 @@ def generate_hooks_config(task_id: int, chorus_url: Optional[str] = None) -> dic
 
 
 def generate_hooks_config_with_handler(
-    task_id: int,
     handler_path: str,
     chorus_url: Optional[str] = None,
 ) -> dict:
@@ -111,7 +127,6 @@ def generate_hooks_config_with_handler(
     dedicated handler script for better error handling.
 
     Args:
-        task_id: The task ID to associate with hook events.
         handler_path: Path to the hook handler script.
         chorus_url: Override the Chorus API URL (for testing).
 
@@ -120,8 +135,8 @@ def generate_hooks_config_with_handler(
     """
     url = chorus_url or get_chorus_url()
 
-    # Handler script receives JSON via stdin, task_id and url as env vars
-    command = f"CHORUS_URL={url} CHORUS_TASK_ID={task_id} python {handler_path}"
+    # Handler script receives JSON via stdin, url as env var
+    command = f"CHORUS_URL={url} python {handler_path}"
 
     # Events that don't need a matcher - use simple format
     no_matcher_events = ["SessionStart", "Stop", "SessionEnd"]
@@ -143,113 +158,85 @@ def generate_hooks_config_with_handler(
     return hooks_config
 
 
-def write_hooks_config(
-    project_root: Path,
-    task_id: int,
-    chorus_url: Optional[str] = None,
-) -> Path:
-    """Write hooks configuration to .claude/settings.json.
+def ensure_hooks_config(chorus_url: Optional[str] = None) -> Path:
+    """Ensure hooks configuration exists in the shared config directory.
 
-    Creates or updates the .claude/settings.json file in the project
-    with hooks that POST to the Chorus API.
+    Creates .claude/settings.json in /tmp/chorus/hooks/ if it doesn't exist.
+    Since all sessions share the same config, this is idempotent.
 
     Args:
-        project_root: Path to the project root directory.
-        task_id: The task ID for this session.
         chorus_url: Override the Chorus API URL (for testing).
 
     Returns:
-        Path to the written settings file.
+        Path to the config directory (for CLAUDE_CONFIG_DIR).
     """
-    claude_dir = project_root / ".claude"
-    claude_dir.mkdir(exist_ok=True)
+    config_dir = get_hooks_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
 
-    settings_path = claude_dir / "settings.json"
+    settings_path = config_dir / "settings.json"
 
-    # Load existing settings if present
-    existing = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text())
-        except json.JSONDecodeError:
-            existing = {}
-
-    # Generate and merge hooks config
-    hooks_config = generate_hooks_config(task_id, chorus_url)
-    existing.update(hooks_config)
-
-    # Write back
-    settings_path.write_text(json.dumps(existing, indent=2))
-
-    return settings_path
-
-
-def clear_hooks_config(project_root: Path) -> None:
-    """Remove hooks configuration from .claude/settings.json.
-
-    Removes the hooks section while preserving other settings.
-
-    Args:
-        project_root: Path to the project root directory.
-    """
-    settings_path = project_root / ".claude" / "settings.json"
-
+    # Only write if it doesn't exist (idempotent)
     if not settings_path.exists():
-        return
+        hooks_config = generate_hooks_config(chorus_url)
+        settings_path.write_text(json.dumps(hooks_config, indent=2))
 
-    try:
-        settings = json.loads(settings_path.read_text())
-        if "hooks" in settings:
-            del settings["hooks"]
-            settings_path.write_text(json.dumps(settings, indent=2))
-    except json.JSONDecodeError:
-        pass
+    return config_dir
+
+
+def clear_hooks_config() -> None:
+    """Remove the shared hooks config directory.
+
+    This cleans up /tmp/chorus/hooks/.claude/ - typically only called
+    during cleanup or testing.
+    """
+    config_dir = get_hooks_config_dir()
+
+    if config_dir.exists():
+        shutil.rmtree(config_dir)
 
 
 class HooksService:
     """Service for managing Claude Code hooks integration.
 
     Handles:
-    - Generating hooks configuration for tasks
-    - Writing/clearing hooks settings
+    - Generating hooks configuration
+    - Ensuring hooks settings exist in shared directory
     - Parsing hook payloads
+
+    Hooks are written to /tmp/chorus/hooks/.claude/ - a shared location
+    for all Claude sessions, avoiding pollution of the hosted project.
     """
 
-    def __init__(self, project_root: Optional[Path] = None, chorus_url: Optional[str] = None):
+    def __init__(self, chorus_url: Optional[str] = None):
         """Initialize the hooks service.
 
         Args:
-            project_root: Project root directory. Defaults to config project_root.
             chorus_url: Override the Chorus API URL.
         """
-        if project_root is None:
-            config = get_config()
-            project_root = config.project_root
-        self.project_root = project_root
         self.chorus_url = chorus_url
 
-    def setup_hooks(self, task_id: int) -> Path:
-        """Set up hooks for a task.
+    def ensure_hooks(self) -> Path:
+        """Ensure hooks configuration exists in the shared directory.
 
-        Args:
-            task_id: The task ID.
+        This is idempotent - safe to call multiple times.
 
         Returns:
-            Path to the settings file.
+            Path to the config directory (for CLAUDE_CONFIG_DIR).
         """
-        return write_hooks_config(self.project_root, task_id, self.chorus_url)
+        return ensure_hooks_config(self.chorus_url)
 
-    def teardown_hooks(self) -> None:
-        """Remove hooks configuration."""
-        clear_hooks_config(self.project_root)
+    def get_config_dir(self) -> Path:
+        """Get the shared config directory path.
 
-    def get_hooks_config(self, task_id: int) -> dict:
-        """Get the hooks configuration for a task.
+        Returns:
+            Path to the config directory.
+        """
+        return get_hooks_config_dir()
 
-        Args:
-            task_id: The task ID.
+    def get_hooks_config(self) -> dict:
+        """Get the hooks configuration.
 
         Returns:
             Dict containing the hooks configuration.
         """
-        return generate_hooks_config(task_id, self.chorus_url)
+        return generate_hooks_config(self.chorus_url)

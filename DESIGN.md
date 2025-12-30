@@ -600,8 +600,8 @@ Chorus provides a **second layer of control** via its own hooks for:
 # Create session for task
 tmux new-session -d -s task-{id} -c {project_root}
 
-# Start Claude with task context (see Task Context Injection below)
-tmux send-keys -t task-{id} 'claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"' Enter
+# Start Claude with task context and shared hooks config
+tmux send-keys -t task-{id} 'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"' Enter
 
 # Capture output
 tmux capture-pane -t task-{id} -p -S -100
@@ -704,32 +704,32 @@ Instead of polling terminal output, we use Claude Code's native hooks system for
 | `Notification` (idle_prompt) | Idle 60+ seconds | confirms `idle` |
 | `SessionEnd` | Claude exits | → `stopped` |
 
-**Hook Configuration:**
+**Shared Hook Configuration:**
 
-Each task generates a `.claude/settings.json` with hooks that POST to Chorus:
+All Claude sessions share a single hook configuration stored in `/tmp/chorus/hooks/.claude/settings.json`. This keeps hooks isolated from the hosted project while avoiding per-task duplication. The config is task-agnostic — the API uses `session_id` from hook payloads to find the associated task.
 
 ```json
 {
   "hooks": {
     "Stop": [{
       "type": "command",
-      "command": "curl -sX POST http://localhost:8000/api/hooks/stop -d '{\"session_id\":\"$SESSION_ID\"}'"
+      "command": "python -c \"import sys,json,urllib.request as r; d=json.loads(sys.stdin.read()); r.urlopen(r.Request('http://localhost:8000/api/hooks/' + d['hook_event_name'].lower(), json.dumps(d).encode(), {'Content-Type': 'application/json'}))\""
     }],
     "PermissionRequest": [{
-      "type": "command",
-      "command": "curl -sX POST http://localhost:8000/api/hooks/permission -d '{\"session_id\":\"$SESSION_ID\"}'"
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "..." }]
     }],
-    "SessionStart": [{
-      "type": "command",
-      "command": "curl -sX POST http://localhost:8000/api/hooks/start -d '{\"session_id\":\"$SESSION_ID\"}'"
-    }],
-    "SessionEnd": [{
-      "type": "command",
-      "command": "curl -sX POST http://localhost:8000/api/hooks/end -d '{\"session_id\":\"$SESSION_ID\"}'"
+    "SessionStart": [{ "type": "command", "command": "..." }],
+    "SessionEnd": [{ "type": "command", "command": "..." }],
+    "PostToolUse": [{
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "..." }]
     }]
   }
 }
 ```
+
+Claude is launched with `CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude"` to use this shared configuration instead of the project's `.claude/` directory.
 
 **Hook Payload (received via stdin):**
 
@@ -744,7 +744,7 @@ Each task generates a `.claude/settings.json` with hooks that POST to Chorus:
 
 **Session-to-Task Mapping:**
 
-Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming hook events with tasks. The hook handler script reads JSON from stdin and forwards it to the Chorus API.
+Tasks store `claude_session_id` (from SessionStart hook) to correlate incoming hook events with tasks. The hook handler reads JSON from stdin and forwards it to the Chorus API, which looks up the task by `session_id`.
 
 ---
 

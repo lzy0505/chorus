@@ -62,6 +62,19 @@ uv run pytest -m "not integration"      # Skip tmux tests
 uv run pytest --cov                     # Coverage report
 ```
 
+## Documentation Updates
+
+For any non-bug-fix changes (new features, refactors, architecture changes), update the relevant documentation:
+
+| Change Type | Update |
+|-------------|--------|
+| New feature / API | `DESIGN.md` (spec), `PLAN.md` (checklist) |
+| Architecture change | `DESIGN.md` (details), `PLAN.md` (add decision note) |
+| Refactor | `PLAN.md` (note if significant) |
+| Completed work | `TODO.md` (mark done), `PLAN.md` (check off items) |
+
+Keep docs proportional to the change — major changes need thorough updates, minor ones just a note.
+
 ## Key Documentation
 
 | File | Content |
