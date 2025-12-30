@@ -92,6 +92,12 @@ h1 {
     min-height: 200px;
 }
 
+.detail-panel,
+.task-panel {
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+}
+
 .panel-header {
     display: flex;
     justify-content: space-between;
