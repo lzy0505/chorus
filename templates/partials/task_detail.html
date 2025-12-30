@@ -3,11 +3,12 @@
 <!-- Auto-refresh wrapper for task info (excludes terminal) -->
 <div id="task-info-refresh"
      {% if task.status.value in ['running', 'waiting'] %}
+     hx-ext="morph"
      hx-get="/dashboard/tasks/{{ task.id }}"
      hx-trigger="every 3s"
      hx-target="#task-info-refresh"
      hx-select="#task-info-refresh"
-     hx-swap="outerHTML"
+     hx-swap="morph:outerHTML"
      {% endif %}>
 
 <div class="panel-header">
