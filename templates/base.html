@@ -14,9 +14,13 @@
         <header>
             <h1>Chorus</h1>
             <span class="subtitle">Task-centric Claude orchestration</span>
+            <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle theme">
+                Theme
+            </button>
         </header>
         {% block content %}{% endblock %}
     </div>
     {% block scripts %}{% endblock %}
+    <script src="/static/theme.js"></script>
 </body>
 </html>
