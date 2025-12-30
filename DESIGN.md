@@ -95,6 +95,7 @@ Task = tmux process + GitButler stack + ephemeral Claude sessions
 | **GitButler Service** | Create/manage stacks via `but` CLI, monitor stack status |
 | **Desktop Notifier** | OS-native notifications for permission requests |
 | **tmux** | Process isolation per task |
+| **ttyd Service** | Web terminal access via iframe (optional) |
 
 ---
 
@@ -235,6 +236,7 @@ A reference to specific lines in a document, linked to a task.
 2. **Start Task** (`pending` → `running`)
    - Create GitButler stack: `but branch new {stack-name}`
    - Spawn tmux session: `tmux new-session -d -s task-{id} -c {project_root}`
+   - Start ttyd for web terminal: `ttyd -W -p {7681+id} tmux attach -t task-{id}`
    - Write task context to `/tmp/chorus/task-{id}/context.md`
    - Start Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
 
@@ -254,6 +256,7 @@ A reference to specific lines in a document, linked to a task.
    - User triggers completion from dashboard
    - GitButler auto-commits via its native hooks (`but claude post-tool/stop`)
    - Alternatively, manual commit: `but commit -m "message" {stack}`
+   - Stop ttyd (release port)
    - Kill tmux session
    - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Update task status to `completed`
@@ -261,6 +264,7 @@ A reference to specific lines in a document, linked to a task.
 6. **Fail Task** (`running` → `failed`)
    - User marks task as failed
    - Optionally discard GitButler stack: `but branch delete {stack}`
+   - Stop ttyd (release port)
    - Kill tmux session
    - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Record failure reason
@@ -612,6 +616,70 @@ tmux send-keys -t task-{id} C-c
 # Kill session
 tmux kill-session -t task-{id}
 ```
+
+### Web Terminal Access (ttyd)
+
+**Purpose:** Provide interactive web-based terminal access to task tmux sessions.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Task Detail View                                                            │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  <iframe src="http://localhost:7682">                                 │  │
+│  │     ┌─────────────────────────────────────────────────────────────┐   │  │
+│  │     │  ttyd (xterm.js)                                            │   │  │
+│  │     │  └── WebSocket ──► tmux attach -t task-1                    │   │  │
+│  │     │                         └── Claude Code session             │   │  │
+│  │     └─────────────────────────────────────────────────────────────┘   │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**How it works:**
+
+1. When a task starts, ttyd is launched attached to the task's tmux session
+2. Port is calculated as `base_port (7681) + task_id`
+3. The dashboard embeds ttyd in an iframe for full terminal interaction
+4. When task completes/fails, ttyd is stopped and port is released
+
+**TtydService (`services/ttyd.py`):**
+
+```python
+class TtydService:
+    def start(self, task_id: int, session_id: str) -> TtydInfo:
+        """Start ttyd for a task's tmux session."""
+        port = 7681 + task_id
+        cmd = ["ttyd", "-W", "-p", str(port), "tmux", "attach", "-t", session_id]
+        # Launches ttyd in background, returns connection info
+
+    def stop(self, task_id: int) -> None:
+        """Stop ttyd for a task (releases port)."""
+
+    def get_url(self, task_id: int) -> str:
+        """Get ttyd URL for a task (e.g., http://localhost:7682)."""
+```
+
+**Key options:**
+- `-W`: Writable mode (allows keyboard input)
+- `-p PORT`: Port to listen on
+
+**Lifecycle:**
+
+| Event | Action |
+|-------|--------|
+| Task Start | `ttyd -W -p {7681+id} tmux attach -t {session}` |
+| Task Running | iframe shows terminal, user can interact |
+| Task Complete/Fail | `kill` ttyd process, port released |
+
+**Benefits over polling-based terminal output:**
+- Full terminal interaction (keyboard input, scrollback)
+- Real-time updates (no 5-second polling delay)
+- Copy/paste support
+- Resizable terminal
+
+**Note:** ttyd is optional. If not installed, tasks still work but without web terminal access.
 
 ### Task Context Injection
 
