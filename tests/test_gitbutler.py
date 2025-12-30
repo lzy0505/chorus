@@ -83,22 +83,27 @@ class TestParsingFunctions:
         assert commit.changes == []
 
     def test_parse_stack(self):
-        """Test parsing a stack from JSON."""
+        """Test parsing a stack from JSON (new GitButler format)."""
         data = {
-            "name": "feature-auth",
             "cliId": "s1",
-            "commits": [
-                {
-                    "cliId": "c1",
-                    "commitId": "abc",
-                    "message": "Add auth",
-                    "authorName": "User",
-                    "authorEmail": "user@test.com",
-                    "createdAt": "2025-01-01T00:00:00Z",
-                }
-            ],
-            "changes": [
+            "assignedChanges": [
                 {"cliId": "g0", "filePath": "auth.py", "changeType": "added"}
+            ],
+            "branches": [
+                {
+                    "name": "feature-auth",
+                    "cliId": "s1",
+                    "commits": [
+                        {
+                            "cliId": "c1",
+                            "commitId": "abc",
+                            "message": "Add auth",
+                            "authorName": "User",
+                            "authorEmail": "user@test.com",
+                            "createdAt": "2025-01-01T00:00:00Z",
+                        }
+                    ],
+                }
             ],
         }
 
@@ -113,10 +118,11 @@ class TestParsingFunctions:
 
     def test_parse_stack_minimal(self):
         """Test parsing stack with missing fields."""
-        stack = _parse_stack({})
+        data = {"cliId": "s1", "assignedChanges": [], "branches": []}
+        stack = _parse_stack(data)
 
         assert stack.name == ""
-        assert stack.cli_id == ""
+        assert stack.cli_id == "s1"
         assert stack.commits == []
         assert stack.changes == []
 
@@ -159,7 +165,13 @@ class TestGitButlerServiceGetStatus:
         """Test getting workspace status."""
         status_json = {
             "stacks": [
-                {"name": "feature-1", "cliId": "s1", "commits": [], "changes": []}
+                {
+                    "cliId": "s1",
+                    "assignedChanges": [],
+                    "branches": [
+                        {"name": "feature-1", "cliId": "s1", "commits": []}
+                    ],
+                }
             ],
             "unassignedChanges": [
                 {"cliId": "g0", "filePath": "README.md", "changeType": "modified"}
@@ -722,8 +734,16 @@ class TestGitButlerServiceListStacks:
             returncode=0,
             stdout=json.dumps({
                 "stacks": [
-                    {"name": "stack-1", "cliId": "s1"},
-                    {"name": "stack-2", "cliId": "s2"},
+                    {
+                        "cliId": "s1",
+                        "assignedChanges": [],
+                        "branches": [{"name": "stack-1", "cliId": "s1", "commits": []}],
+                    },
+                    {
+                        "cliId": "s2",
+                        "assignedChanges": [],
+                        "branches": [{"name": "stack-2", "cliId": "s2", "commits": []}],
+                    },
                 ],
                 "unassignedChanges": [],
             }),
