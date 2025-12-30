@@ -52,6 +52,12 @@ class StatusPatterns:
 
 
 @dataclass
+class NotificationsConfig:
+    """Desktop notifications configuration."""
+    enabled: bool = True
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     server: ServerConfig = field(default_factory=ServerConfig)
