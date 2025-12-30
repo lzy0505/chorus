@@ -1,5 +1,15 @@
 <div id="task-detail-content">
 
+<!-- Auto-refresh wrapper for task info (excludes terminal) -->
+<div id="task-info-refresh"
+     {% if task.status.value in ['running', 'waiting'] %}
+     hx-get="/dashboard/tasks/{{ task.id }}"
+     hx-trigger="every 3s"
+     hx-target="#task-info-refresh"
+     hx-select="#task-info-refresh"
+     hx-swap="outerHTML"
+     {% endif %}>
+
 <div class="panel-header">
     <span>{{ task.title }}</span>
     <span class="task-status status-{{ task.status.value }}">{{ task.status.value }}</span>
@@ -100,7 +110,9 @@
     {% endif %}
 </div>
 
-<!-- Terminal (for running tasks) -->
+</div><!-- end task-info-refresh -->
+
+<!-- Terminal (for running tasks) - outside refresh zone -->
 {% if task.status.value in ['running', 'waiting'] %}
 <div class="terminal-section">
     <div class="terminal-header">
@@ -111,7 +123,6 @@
     </div>
     <iframe
         id="terminal-iframe-{{ task.id }}"
-        hx-preserve="true"
         src="http://localhost:{{ 7681 + task.id }}"
         class="terminal-iframe"
         title="Task Terminal">
