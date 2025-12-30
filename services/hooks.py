@@ -249,6 +249,9 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
 
     All without polluting the global config.
 
+    IMPORTANT: Credentials are ALWAYS refreshed from ~/.claude.json to ensure
+    spawned sessions pick up any authentication changes (e.g., after re-login).
+
     Args:
         chorus_url: Override the Chorus API URL (for testing).
         force: Force regeneration even if config exists.
@@ -259,13 +262,22 @@ def ensure_hooks_config(chorus_url: Optional[str] = None, force: bool = False) -
     config_dir = get_hooks_config_dir()
     settings_path = config_dir / "settings.json"
 
-    # Check if we need to regenerate
+    # Always refresh credentials from ~/.claude.json to pick up auth changes
+    # This is critical: if user re-authenticates, spawned sessions need new creds
+    global_creds = get_global_credentials_path()
+    if global_creds.exists():
+        config_dir.mkdir(parents=True, exist_ok=True)
+        target_creds = config_dir / ".claude.json"
+        shutil.copy2(global_creds, target_creds)
+
+    # Check if we need to regenerate the full config (settings, hooks, etc.)
     if settings_path.exists() and not force:
         return config_dir
 
     # Remove existing config dir if forcing regeneration
     if config_dir.exists() and force:
         shutil.rmtree(config_dir)
+        config_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy entire global config directory if it exists
     global_config_dir = get_global_config_dir()
