@@ -79,6 +79,24 @@
     </button>
 
     {% elif task.status.value == 'waiting' %}
+    <button class="btn btn-secondary"
+            hx-post="/dashboard/tasks/{{ task.id }}/restart-claude"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Restart Claude
+    </button>
+    <button class="btn btn-success"
+            hx-post="/dashboard/tasks/{{ task.id }}/complete"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Complete
+    </button>
+    <button class="btn btn-danger"
+            hx-post="/dashboard/tasks/{{ task.id }}/fail"
+            hx-target="#task-detail"
+            hx-swap="innerHTML">
+        Fail
+    </button>
     {% if task.permission_prompt %}
     <div class="permission-prompt">{{ task.permission_prompt }}</div>
     {% endif %}
