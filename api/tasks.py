@@ -18,6 +18,7 @@ from models import Task, TaskStatus, ClaudeStatus
 from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError
 from services.gitbutler import GitButlerService, StackExistsError, GitButlerError
 from services.hooks import HooksService
+from services.context import write_task_context, cleanup_task_context, get_context_file
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -271,8 +272,11 @@ async def start_task(
     db.commit()
     db.refresh(task)
 
-    # 5. Start Claude in tmux
-    tmux.start_claude(task_id, initial_prompt=request.initial_prompt)
+    # 5. Write task context to /tmp (not in project directory)
+    context_file = write_task_context(task, user_prompt=request.initial_prompt)
+
+    # 6. Start Claude in tmux with context injected via --append-system-prompt
+    tmux.start_claude(task_id, context_file=context_file)
 
     return ActionResponse(
         status="ok",
@@ -301,8 +305,11 @@ async def restart_claude(
 
     tmux = TmuxService()
 
+    # Get context file path (context was written when task started)
+    context_file = get_context_file(task_id)
+
     try:
-        tmux.restart_claude(task_id)
+        tmux.restart_claude(task_id, context_file=context_file)
     except SessionNotFoundError:
         raise HTTPException(
             status_code=500,
@@ -442,6 +449,9 @@ async def complete_task(
     # Clear hooks
     hooks.teardown_hooks()
 
+    # Cleanup context files from /tmp
+    cleanup_task_context(task_id)
+
     # Update task
     task.status = TaskStatus.completed
     task.claude_status = ClaudeStatus.stopped
@@ -493,6 +503,9 @@ async def fail_task(
 
     # Clear hooks
     hooks.teardown_hooks()
+
+    # Cleanup context files from /tmp
+    cleanup_task_context(task_id)
 
     # Optionally delete stack
     if request.delete_stack and task.stack_name:

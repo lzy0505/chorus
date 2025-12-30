@@ -235,8 +235,8 @@ A reference to specific lines in a document, linked to a task.
 2. **Start Task** (`pending` → `running`)
    - Create GitButler stack: `but branch new {stack-name}`
    - Spawn tmux session: `tmux new-session -d -s task-{id} -c {project_root}`
-   - Start Claude in tmux: `tmux send-keys "claude" Enter`
-   - Send initial prompt with task description + document context
+   - Write task context to `/tmp/chorus/task-{id}/context.md`
+   - Start Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
 
 3. **Monitor Task** (`running` ↔ `waiting`)
    - Poll tmux output every 1 second
@@ -246,21 +246,23 @@ A reference to specific lines in a document, linked to a task.
 
 4. **Restart Claude** (within `running`)
    - Kill current Claude process in tmux
-   - Restart Claude: `tmux send-keys "claude" Enter`
+   - Restart Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
    - Increment `claude_restarts` counter
-   - Optionally re-send context prompt
+   - Context is automatically re-injected from existing file
 
 5. **Complete Task** (`running` → `completed`)
    - User triggers completion from dashboard
    - GitButler auto-commits via its native hooks (`but claude post-tool/stop`)
    - Alternatively, manual commit: `but commit -m "message" {stack}`
    - Kill tmux session
+   - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Update task status to `completed`
 
 6. **Fail Task** (`running` → `failed`)
    - User marks task as failed
    - Optionally discard GitButler stack: `but branch delete {stack}`
    - Kill tmux session
+   - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Record failure reason
 
 ---
@@ -297,33 +299,35 @@ Get task details including document references.
 Update task fields (title, description, priority).
 
 #### `POST /api/tasks/{task_id}/start`
-Start the task — creates stack, spawns tmux, launches Claude.
-
-**Implementation:**
-1. Generate stack name: `task-{id}-{slug}`
-2. Create GitButler stack: `but branch new {stack_name} -j`
-3. Spawn tmux: `tmux new-session -d -s task-{id} -c {project_root}`
-4. Start Claude: `tmux send-keys "claude" Enter`
-5. Build prompt with task description + document references
-6. Send prompt: `tmux send-keys "{prompt}" Enter`
-7. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_name = {stack_name}`
-
-#### `POST /api/tasks/{task_id}/restart-claude`
-Restart Claude session within the task's tmux.
+Start the task — creates stack, spawns tmux, launches Claude with task context.
 
 **Request Body (optional):**
 ```json
 {
-  "resend_context": true
+  "initial_prompt": "Focus on the OAuth flow first"
 }
 ```
 
 **Implementation:**
+1. Generate stack name: `task-{id}-{slug}`
+2. Create GitButler stack: `but branch new {stack_name}`
+3. Spawn tmux: `tmux new-session -d -s task-{id} -c {project_root}`
+4. Write task context to `/tmp/chorus/task-{id}/context.md` (includes task description, stack info, and `initial_prompt`)
+5. Start Claude with context: `claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"`
+6. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_name = {stack_name}`
+
+**Note:** The `initial_prompt` is included in the context file under "## Instructions", not sent as a separate message. This ensures Claude sees all context in its system prompt.
+
+#### `POST /api/tasks/{task_id}/restart-claude`
+Restart Claude session within the task's tmux, re-injecting task context.
+
+**Implementation:**
 1. Send Ctrl+C to kill current Claude: `tmux send-keys -t {session} C-c`
 2. Wait briefly
-3. Start Claude: `tmux send-keys "claude" Enter`
+3. Start Claude with existing context: `claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"`
 4. Increment `claude_restarts`
-5. If `resend_context`: rebuild and send prompt
+
+**Note:** Context is automatically re-injected from the existing `/tmp/chorus/task-{id}/context.md` file. No need to specify `resend_context` — it's always included.
 
 #### `POST /api/tasks/{task_id}/send`
 Send text to the task's Claude session.
@@ -596,11 +600,8 @@ Chorus provides a **second layer of control** via its own hooks for:
 # Create session for task
 tmux new-session -d -s task-{id} -c {project_root}
 
-# Start Claude
-tmux send-keys -t task-{id} "claude" Enter
-
-# Send prompt
-tmux send-keys -t task-{id} "{prompt}" Enter
+# Start Claude with task context (see Task Context Injection below)
+tmux send-keys -t task-{id} 'claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"' Enter
 
 # Capture output
 tmux capture-pane -t task-{id} -p -S -100
@@ -611,6 +612,83 @@ tmux send-keys -t task-{id} C-c
 # Kill session
 tmux kill-session -t task-{id}
 ```
+
+### Task Context Injection
+
+**Purpose:** Provide task-specific context to Claude Code without polluting the project directory.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  POST /api/tasks/{id}/start                                 │
+│                                                             │
+│  1. Write context to /tmp/chorus/task-{id}/context.md       │
+│  2. Start Claude with --append-system-prompt flag           │
+│  3. Context persists for entire Claude session              │
+│  4. Cleaned up when task completes/fails                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why `/tmp/` instead of project directory?**
+- Context files are task-scoped and ephemeral
+- No pollution in working directory or git history
+- Each task's context is isolated (`/tmp/chorus/task-{id}/`)
+- Automatically cleaned up on task completion
+
+**Context File Format:**
+
+```markdown
+# Current Task: Fix authentication timeout bug
+Task ID: 42
+GitButler Stack: `task-42-fix-authentication-timeout-bug`
+
+## Description
+Users are getting logged out after 5 minutes instead of 30 minutes.
+The session timeout config seems to be ignored.
+
+## Git Workflow
+- All changes for this task should be committed to stack: `task-42-fix-authentication-timeout-bug`
+- Use `but commit -c task-42-fix-authentication-timeout-bug` to commit changes
+- Do NOT use `git commit` directly
+
+## Instructions
+Check the JWT expiry settings in auth.py first
+```
+
+**How `--append-system-prompt` works:**
+- Adds content to Claude's system prompt at startup
+- Context is visible to Claude throughout the entire session
+- Survives all interactions within the session
+- Re-injected automatically on `restart-claude`
+
+**Implementation (`services/context.py`):**
+
+```python
+CONTEXT_BASE_DIR = Path("/tmp/chorus")
+
+def write_task_context(task: Task, user_prompt: str = None) -> Path:
+    """Write task context to /tmp/chorus/task-{id}/context.md"""
+    context_dir = CONTEXT_BASE_DIR / f"task-{task.id}"
+    context_dir.mkdir(parents=True, exist_ok=True)
+
+    context_file = context_dir / "context.md"
+    context_file.write_text(build_task_context(task, user_prompt))
+    return context_file
+
+def cleanup_task_context(task_id: int) -> None:
+    """Remove context directory on task completion/failure"""
+    shutil.rmtree(CONTEXT_BASE_DIR / f"task-{task_id}", ignore_errors=True)
+```
+
+**Lifecycle:**
+
+| Event | Action |
+|-------|--------|
+| Task Start | Write context to `/tmp/chorus/task-{id}/context.md` |
+| Claude Start | `claude --append-system-prompt "$(cat /tmp/.../context.md)"` |
+| Claude Restart | Re-inject same context file |
+| Task Complete/Fail | Delete `/tmp/chorus/task-{id}/` directory |
 
 ### Claude Code Hooks Integration
 
