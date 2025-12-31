@@ -4,6 +4,7 @@ These endpoints return HTML fragments for htmx to swap into the page.
 """
 
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse
@@ -82,7 +83,7 @@ async def create_task(
 
 @router.delete("/tasks/{task_id}", response_class=HTMLResponse)
 async def delete_task(
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Delete a task and return HTML to clear task item and detail panel."""
@@ -102,7 +103,7 @@ async def delete_task(
 @router.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def get_task_detail(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Get task detail as HTML partial with OOB task list update."""
@@ -116,7 +117,7 @@ async def get_task_detail(
 
 @router.get("/tasks/{task_id}/output", response_class=HTMLResponse)
 async def get_task_output(
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Get terminal output as HTML."""
@@ -141,7 +142,7 @@ async def get_task_output(
 @router.post("/tasks/{task_id}/send", response_class=HTMLResponse)
 async def send_message(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Send a message to Claude and return updated output."""
@@ -168,7 +169,7 @@ async def send_message(
 @router.post("/tasks/{task_id}/start", response_class=HTMLResponse)
 async def start_task(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Start a task and return updated task detail HTML + OOB task item."""
@@ -192,7 +193,7 @@ async def start_task(
 @router.post("/tasks/{task_id}/restart-claude", response_class=HTMLResponse)
 async def restart_claude(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Restart Claude and return updated task detail HTML + OOB task item."""
@@ -210,7 +211,7 @@ async def restart_claude(
 @router.post("/tasks/{task_id}/complete", response_class=HTMLResponse)
 async def complete_task(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Complete a task and return updated task detail HTML + OOB task item."""
@@ -228,7 +229,7 @@ async def complete_task(
 @router.post("/tasks/{task_id}/fail", response_class=HTMLResponse)
 async def fail_task(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ):
     """Fail a task and return updated task detail HTML + OOB task item."""
@@ -246,7 +247,7 @@ async def fail_task(
 @router.post("/tasks/{task_id}/respond", response_class=HTMLResponse)
 async def respond_to_permission(
     request: Request,
-    task_id: int,
+    task_id: UUID,
     confirm: bool = True,
     db: Session = Depends(get_db),
 ):
