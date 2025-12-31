@@ -92,7 +92,7 @@ async def test_handle_tool_use_event(db, monitor):
     """Test handling tool_use event."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
         claude_status=ClaudeStatus.idle,
@@ -107,7 +107,7 @@ async def test_handle_tool_use_event(db, monitor):
     )
 
     # Handle event
-    await monitor._handle_event(1, event)
+    await monitor._handle_event(TEST_TASK_ID, event)
 
     # Check task status updated to busy
     db.refresh(task)
@@ -115,11 +115,16 @@ async def test_handle_tool_use_event(db, monitor):
 
 
 @pytest.mark.asyncio
-async def test_handle_tool_result_file_edit(db, monitor, mock_gitbutler):
+async def test_handle_tool_result_file_edit(db, monitor, mock_gitbutler, monkeypatch):
     """Test handling tool_result for file edit triggers GitButler commit."""
+    from pathlib import Path
+
+    # Setup - mock get_transcript_dir
+    monkeypatch.setattr("services.json_monitor.get_transcript_dir", lambda x: Path("/tmp/test-transcript"))
+
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
         stack_name="test-stack",
@@ -128,14 +133,24 @@ async def test_handle_tool_result_file_edit(db, monitor, mock_gitbutler):
     db.add(task)
     db.commit()
 
-    # Create tool_result event for file edit
-    event = ClaudeJsonEvent(
-        event_type="tool_result",
-        data={"type": "tool_result", "tool": "Edit", "status": "success"},
+    # First send tool_use event
+    tool_use_event = ClaudeJsonEvent(
+        event_type="tool_use",
+        data={
+            "type": "tool_use",
+            "id": "tool_456",
+            "toolName": "Edit",
+            "toolInput": {"file_path": "/test/file.py"}
+        },
     )
+    await monitor._handle_event(TEST_TASK_ID, tool_use_event)
 
-    # Handle event
-    await monitor._handle_event(1, event)
+    # Then send tool_result event for file edit
+    tool_result_event = ClaudeJsonEvent(
+        event_type="tool_result",
+        data={"type": "tool_result", "toolUseId": "tool_456", "isError": False},
+    )
+    await monitor._handle_event(TEST_TASK_ID, tool_result_event)
 
     # Check GitButler commit was called
     mock_gitbutler.commit_to_stack.assert_called_once_with("test-stack")
@@ -186,16 +201,16 @@ async def test_handle_result_event(db, monitor):
     # Create result event
     event = ClaudeJsonEvent(
         event_type="result",
-        data={"type": "result", "session_id": "xyz789"},
+        data={"type": "result", "sessionId": "xyz789"},
         session_id="xyz789",
     )
 
     # Handle event
-    await monitor._handle_event(1, event)
+    await monitor._handle_event(TEST_TASK_ID, event)
 
     # Check session_id was stored
     db.refresh(task)
-    assert task.json_session_id == "xyz789"
+    assert task.claude_session_id == "xyz789"
     assert task.claude_status == ClaudeStatus.idle
 
 

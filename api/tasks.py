@@ -47,7 +47,7 @@ class TaskUpdate(BaseModel):
 class TaskResponse(BaseModel):
     """Response model for task data."""
 
-    id: int
+    id: UUID
     title: str
     description: str
     priority: int
@@ -255,7 +255,7 @@ async def start_task(
     try:
         stack = gitbutler.create_stack(stack_name)
         task.stack_name = stack.name
-        task.stack_id = stack.cli_id
+        task.stack_cli_id = stack.cli_id
     except StackExistsError:
         # Stack already exists (maybe from a previous failed start)
         task.stack_name = stack_name
@@ -620,7 +620,7 @@ async def fail_task(
         try:
             gitbutler.delete_stack(task.stack_name)
             task.stack_name = None
-            task.stack_id = None
+            task.stack_cli_id = None
         except GitButlerError:
             pass  # Stack might not exist
 

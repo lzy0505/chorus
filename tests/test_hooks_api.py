@@ -38,7 +38,7 @@ class TestHookSessionStart:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
 
         # Verify task was updated
         with Session(engine) as db:
@@ -83,7 +83,7 @@ class TestHookSessionStart:
         )
 
         assert response.status_code == 200
-        assert response.json()["task_id"] == task_id
+        assert response.json()["task_id"] == str(task_id)
 
 
 class TestHookStop:
@@ -114,7 +114,7 @@ class TestHookStop:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
 
         with Session(engine) as db:
             task = db.get(Task, task_id)
@@ -194,7 +194,7 @@ class TestHookPermissionRequest:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
 
         with Session(engine) as db:
             task = db.get(Task, task_id)
@@ -244,7 +244,7 @@ class TestHookSessionEnd:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
 
         with Session(engine) as db:
             task = db.get(Task, task_id)
@@ -472,7 +472,7 @@ class TestHookPostToolUse:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
         assert "abc123de" in data["message"]  # Commit ID prefix
 
         # Verify GitButler was called
@@ -601,7 +601,7 @@ class TestHookPostToolUse:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ignored"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
         assert "no GitButler stack" in data["message"]
 
     @patch("api.hooks.GitButlerService")
@@ -635,7 +635,7 @@ class TestHookPostToolUse:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
         assert "No changes to commit" in data["message"]
 
     @patch("api.hooks.GitButlerService")
@@ -669,7 +669,7 @@ class TestHookPostToolUse:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "error"
-        assert data["task_id"] == task_id
+        assert data["task_id"] == str(task_id)
         assert "GitButler error" in data["message"]
 
     @patch("api.hooks.GitButlerService")

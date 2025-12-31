@@ -93,7 +93,9 @@ class TestTaskCRUD:
 
     def test_get_task_not_found(self, client):
         """Test getting non-existent task."""
-        response = client.get("/api/tasks/999")
+        from uuid import uuid4
+        non_existent_id = uuid4()
+        response = client.get(f"/api/tasks/{non_existent_id}")
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
