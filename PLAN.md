@@ -82,26 +82,27 @@ Result: All edits → same GitButler stack!
 - [x] Stack discovery: `discover_stack_for_session()`
 - [x] Documentation: Architecture finalized
 
-#### Implementation Tasks
+#### Implementation Tasks ✅ (COMPLETED 2025-12-31)
 
 **1. `services/tmux.py`**
 - [x] Add helper functions: `get_transcript_dir()`, `create_transcript_file()`
-- [ ] Update `create_task_session()`: Create transcript on task start
-- [ ] Add cleanup in `kill_task_session()`
+- [x] Update `create_task_session()`: Create transcript on task start
+- [x] Add cleanup in `kill_task_session()`
 
 **2. `models.py`**
-- [ ] Add field: `claude_session_id: Optional[str]` (for --resume)
+- [x] Add field: `claude_session_id: Optional[str]` (for --resume)
 
 **3. `services/json_monitor.py`**
-- [ ] Add GitButlerService integration
-- [ ] On `tool_use` (Edit/Write/MultiEdit): Call `pre_tool_hook(task.id, ...)`
-- [ ] On `tool_result` success: Call `post_tool_hook(task.id, ...)`
-- [ ] On first successful edit: Discover and save stack
-- [ ] Extract Claude session_id for --resume
+- [x] Add GitButlerService integration
+- [x] On `tool_use` (Edit/Write/MultiEdit): Call `pre_tool_hook(task.id, ...)`
+- [x] On `tool_result` success: Call `post_tool_hook(task.id, ...)`
+- [x] On first successful edit: Discover and save stack
+- [x] Extract Claude session_id for --resume
 
 **4. `api/tasks.py`**
-- [ ] On task completion: Call `stop_hook(task.id, ...)`
-- [ ] Cleanup transcript directory
+- [x] On task completion: Call `stop_hook(task.id, ...)`
+- [x] Cleanup transcript directory (handled by tmux)
+- [x] Update all task_id parameters from int to UUID
 
 #### Testing
 - [ ] Unit: Transcript creation

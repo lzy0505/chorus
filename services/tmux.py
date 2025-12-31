@@ -6,6 +6,7 @@ The tmux session persists even if Claude crashes/hangs, allowing restarts.
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -44,12 +45,12 @@ class SessionInfo:
     """Information about a tmux session."""
 
     session_id: str
-    task_id: int
+    task_id: UUID
     exists: bool
     has_claude_process: bool = False
 
 
-def _session_id_for_task(task_id: int) -> str:
+def _session_id_for_task(task_id: UUID) -> str:
     """Generate tmux session ID for a task."""
     config = get_config()
     return f"{config.tmux.session_prefix}-task-{task_id}"
@@ -153,22 +154,24 @@ class TmuxService:
             project_root = str(config.project_root)
         self.project_root = project_root
 
-    def get_session_id(self, task_id: int) -> str:
+    def get_session_id(self, task_id: UUID) -> str:
         """Get the tmux session ID for a task."""
         return _session_id_for_task(task_id)
 
-    def session_exists(self, task_id: int) -> bool:
+    def session_exists(self, task_id: UUID) -> bool:
         """Check if the tmux session for a task exists."""
         return session_exists(self.get_session_id(task_id))
 
-    def create_task_session(self, task_id: int) -> str:
+    def create_task_session(self, task_id: UUID) -> str:
         """Create a new tmux session for a task.
 
+        Also creates the transcript directory and file for GitButler hooks.
+
         Args:
-            task_id: The task ID to create a session for.
+            task_id: The task UUID to create a session for.
 
         Returns:
-            The session ID (e.g., 'claude-task-1')
+            The session ID (e.g., 'chorus-task-{uuid}')
 
         Raises:
             SessionExistsError: If the session already exists.
@@ -179,6 +182,9 @@ class TmuxService:
             raise SessionExistsError(f"Session {session_id} already exists")
 
         logger.info(f"Creating tmux session for task {task_id}: {session_id}")
+
+        # Create transcript file for GitButler hooks
+        create_transcript_file(task_id, self.project_root)
 
         # Create detached tmux session with shell (not Claude yet)
         _run_tmux(
@@ -374,11 +380,11 @@ class TmuxService:
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
         logger.info(f"Claude Code restarted for task {task_id}")
 
-    def kill_task_session(self, task_id: int) -> None:
-        """Kill the tmux session for a task.
+    def kill_task_session(self, task_id: UUID) -> None:
+        """Kill the tmux session for a task and cleanup transcript directory.
 
         Args:
-            task_id: The task ID.
+            task_id: The task UUID.
 
         Raises:
             SessionNotFoundError: If the session doesn't exist.
@@ -392,7 +398,13 @@ class TmuxService:
         _run_tmux(["kill-session", "-t", session_id])
         logger.info(f"Killed tmux session: {session_id}")
 
-    def capture_output(self, task_id: int, lines: int = 100) -> str:
+        # Cleanup transcript directory
+        transcript_dir = get_transcript_dir(task_id)
+        if transcript_dir.exists():
+            shutil.rmtree(transcript_dir, ignore_errors=True)
+            logger.debug(f"Cleaned up transcript directory: {transcript_dir}")
+
+    def capture_output(self, task_id: UUID, lines: int = 100) -> str:
         """Capture terminal output from the task's tmux session.
 
         Args:
@@ -416,7 +428,7 @@ class TmuxService:
         )
         return result.stdout if result.returncode == 0 else ""
 
-    def capture_json_events(self, task_id: int) -> str:
+    def capture_json_events(self, task_id: UUID) -> str:
         """Capture JSON events from the task's tmux session.
 
         This method is specifically for capturing output from Claude running
@@ -443,7 +455,7 @@ class TmuxService:
         )
         return result.stdout if result.returncode == 0 else ""
 
-    def send_keys(self, task_id: int, text: str, enter: bool = True) -> None:
+    def send_keys(self, task_id: UUID, text: str, enter: bool = True) -> None:
         """Send text to the task's tmux session.
 
         Args:
@@ -464,7 +476,7 @@ class TmuxService:
             args.append("Enter")
         _run_tmux(args)
 
-    def send_confirmation(self, task_id: int, confirm: bool) -> None:
+    def send_confirmation(self, task_id: UUID, confirm: bool) -> None:
         """Respond to a permission prompt.
 
         Args:
@@ -477,7 +489,7 @@ class TmuxService:
         response = "y" if confirm else "n"
         self.send_keys(task_id, response)
 
-    def get_session_info(self, task_id: int) -> SessionInfo:
+    def get_session_info(self, task_id: UUID) -> SessionInfo:
         """Get information about a task's tmux session.
 
         Args:

@@ -8,6 +8,7 @@ Tasks are the primary entity in Chorus. Each task:
 
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -15,7 +16,7 @@ from sqlmodel import Session, select
 
 from database import get_db
 from models import Task, TaskStatus, ClaudeStatus
-from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError
+from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError, get_transcript_dir
 from services.gitbutler import GitButlerService, StackExistsError, GitButlerError
 from services.hooks import HooksService
 from services.context import write_task_context, cleanup_task_context, get_context_file
@@ -100,11 +101,11 @@ class ActionResponse(BaseModel):
 
     status: str
     message: str
-    task_id: int
+    task_id: UUID
 
 
 # Helper functions
-def get_task_or_404(db: Session, task_id: int) -> Task:
+def get_task_or_404(db: Session, task_id: UUID) -> Task:
     """Get a task by ID or raise 404."""
     task = db.get(Task, task_id)
     if not task:
@@ -159,7 +160,7 @@ async def list_tasks(
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ) -> Task:
     """Get a task by ID."""
@@ -168,7 +169,7 @@ async def get_task(
 
 @router.put("/{task_id}", response_model=TaskResponse)
 async def update_task(
-    task_id: int,
+    task_id: UUID,
     task_data: TaskUpdate,
     db: Session = Depends(get_db),
 ) -> Task:
@@ -190,7 +191,7 @@ async def update_task(
 
 @router.delete("/{task_id}")
 async def delete_task(
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ) -> ActionResponse:
     """Delete a task.
@@ -220,7 +221,7 @@ async def delete_task(
 # Lifecycle Endpoints
 @router.post("/{task_id}/start", response_model=ActionResponse)
 async def start_task(
-    task_id: int,
+    task_id: UUID,
     request: TaskStartRequest = TaskStartRequest(),
     db: Session = Depends(get_db),
 ) -> ActionResponse:
@@ -321,7 +322,7 @@ async def start_task(
 
 @router.post("/{task_id}/restart-claude", response_model=ActionResponse)
 async def restart_claude(
-    task_id: int,
+    task_id: UUID,
     db: Session = Depends(get_db),
 ) -> ActionResponse:
     """Restart Claude in the task's tmux session.
@@ -402,7 +403,7 @@ async def restart_claude(
 
 @router.post("/{task_id}/send", response_model=ActionResponse)
 async def send_message(
-    task_id: int,
+    task_id: UUID,
     request: TaskSendRequest,
     db: Session = Depends(get_db),
 ) -> ActionResponse:
@@ -465,7 +466,7 @@ async def send_message(
 
 @router.post("/{task_id}/respond", response_model=ActionResponse)
 async def respond_to_permission(
-    task_id: int,
+    task_id: UUID,
     request: TaskRespondRequest,
     db: Session = Depends(get_db),
 ) -> ActionResponse:
@@ -507,7 +508,7 @@ async def respond_to_permission(
 
 @router.post("/{task_id}/complete", response_model=ActionResponse)
 async def complete_task(
-    task_id: int,
+    task_id: UUID,
     request: TaskCompleteRequest = TaskCompleteRequest(),
     db: Session = Depends(get_db),
 ) -> ActionResponse:
@@ -531,11 +532,25 @@ async def complete_task(
 
     tmux = TmuxService()
     ttyd = TtydService()
+    gitbutler = GitButlerService()
 
     # Stop ttyd (release port)
     ttyd.stop_if_running(task_id)
 
-    # Kill tmux session
+    # Call GitButler stop hook before cleanup
+    transcript_dir = get_transcript_dir(task_id)
+    transcript_path = str(transcript_dir / "transcript.json")
+
+    try:
+        gitbutler.call_stop_hook(
+            session_id=str(task_id),
+            transcript_path=transcript_path
+        )
+        logger.info(f"Called stop hook for task {task_id}")
+    except Exception as e:
+        logger.error(f"Stop hook failed: {e}", exc_info=True)
+
+    # Kill tmux session (this also cleans up transcript directory)
     try:
         tmux.kill_task_session(task_id)
     except SessionNotFoundError:
@@ -564,7 +579,7 @@ async def complete_task(
 
 @router.post("/{task_id}/fail", response_model=ActionResponse)
 async def fail_task(
-    task_id: int,
+    task_id: UUID,
     request: TaskFailRequest = TaskFailRequest(),
     db: Session = Depends(get_db),
 ) -> ActionResponse:
@@ -628,7 +643,7 @@ async def fail_task(
 
 @router.get("/{task_id}/output")
 async def get_task_output(
-    task_id: int,
+    task_id: UUID,
     lines: int = 100,
     db: Session = Depends(get_db),
 ) -> dict:

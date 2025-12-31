@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-31 12:03
+> Auto-updated by Claude Code. Last update: 2025-12-31 12:14
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -22,24 +22,25 @@
 - ✅ Stack discovery: `discover_stack_for_session()`
 - ✅ Tests: `tests/test_gitbutler.py`
 
-**Implementation - IN PROGRESS 🔄**
-- [ ] `services/tmux.py`:
+**Implementation - COMPLETED ✅ (2025-12-31)**
+- [x] `services/tmux.py`:
   - [x] Add helper functions (get_transcript_dir, create_transcript_file)
-  - [ ] Update `create_task_session()` to create transcript
-  - [ ] Add transcript cleanup on session kill
-- [ ] `models.py`:
-  - [ ] Add `claude_session_id: Optional[str]` field (for --resume)
-- [ ] `services/json_monitor.py`:
-  - [ ] Add GitButlerService integration
-  - [ ] Call `pre_tool_hook()` on Edit/Write/MultiEdit tool_use
-  - [ ] Call `post_tool_hook()` on successful tool_result
-  - [ ] Discover and save stack after first edit
-  - [ ] Extract Claude session_id for --resume
-- [ ] `api/tasks.py`:
-  - [ ] Call `stop_hook()` on task completion
-  - [ ] Cleanup transcript directory
+  - [x] Update `create_task_session()` to create transcript
+  - [x] Add transcript cleanup on session kill
+- [x] `models.py`:
+  - [x] Add `claude_session_id: Optional[str]` field (for --resume)
+- [x] `services/json_monitor.py`:
+  - [x] Add GitButlerService integration
+  - [x] Call `pre_tool_hook()` on Edit/Write/MultiEdit tool_use
+  - [x] Call `post_tool_hook()` on successful tool_result
+  - [x] Discover and save stack after first edit
+  - [x] Extract Claude session_id for --resume
+- [x] `api/tasks.py`:
+  - [x] Call `stop_hook()` on task completion
+  - [x] Cleanup transcript directory (handled by tmux.kill_task_session)
+  - [x] Update all task_id parameters from int to UUID
 
-**Testing - PENDING ⏳**
+**Testing - UP NEXT ⏭️**
 - [ ] Unit tests for transcript creation
 - [ ] Unit tests for hook integration
 - [ ] Integration: single task with Claude restart
@@ -112,8 +113,10 @@
 7. commit_to_stack(stack_name)
 ```
 
-**Current vs Target State:**
+**Implementation Status:**
 - ✅ UUID migration complete
 - ✅ Hook methods implemented
-- ❌ Hooks not yet called by json_monitor
-- ❌ Transcript files not yet created
+- ✅ Hooks integrated into json_monitor
+- ✅ Transcript files created on task start
+- ✅ Stop hook called on task completion
+- ⏭️ Testing pending
