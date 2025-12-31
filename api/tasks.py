@@ -294,7 +294,22 @@ async def start_task(
     # 7. Start Claude in tmux with context injected via --append-system-prompt
     # Pass initial_prompt to send as a message (or default kickoff if None)
     kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
-    tmux.start_claude(task_id, initial_prompt=kickoff_message, context_file=context_file)
+
+    # Use JSON mode if enabled in config
+    from config import get_config
+    config = get_config()
+    if config.monitoring.use_json_mode:
+        tmux.start_claude_json_mode(
+            task_id,
+            initial_prompt=kickoff_message,
+            context_file=context_file
+        )
+    else:
+        tmux.start_claude(
+            task_id,
+            initial_prompt=kickoff_message,
+            context_file=context_file
+        )
 
     logger.info(f"Task {task_id} started successfully with stack '{task.stack_name}'")
     return ActionResponse(
@@ -331,8 +346,34 @@ async def restart_claude(
     # Send a kickoff message to get Claude working after restart
     kickoff_message = "Continue to complete the HIGHEST PRIORITY task."
 
+    # Use JSON mode if enabled in config
+    from config import get_config
+    config = get_config()
+
     try:
-        tmux.restart_claude(task_id, context_file=context_file, initial_prompt=kickoff_message)
+        if config.monitoring.use_json_mode:
+            # In JSON mode, kill Claude and restart with JSON mode
+            # The restart_claude method sends Ctrl-C and relaunches, but we need JSON mode
+            import subprocess
+            import time
+            session_id = tmux.get_session_id(task_id)
+
+            # Send Ctrl-C to interrupt
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.2)
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.3)
+
+            # Start in JSON mode with resume if available
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=kickoff_message,
+                context_file=context_file,
+                resume_session_id=task.json_session_id
+            )
+        else:
+            # Use legacy restart method
+            tmux.restart_claude(task_id, context_file=context_file, initial_prompt=kickoff_message)
     except SessionNotFoundError:
         raise HTTPException(
             status_code=500,
@@ -383,13 +424,37 @@ async def send_message(
 
     tmux = TmuxService()
 
-    try:
-        tmux.send_keys(task_id, request.message)
-    except SessionNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Tmux session for task {task_id} not found",
-        )
+    # Use JSON mode if enabled in config
+    from config import get_config
+    config = get_config()
+
+    if config.monitoring.use_json_mode and task.json_session_id:
+        # In JSON mode, use --resume to continue the session
+        try:
+            # Get context file if it exists
+            from services.context import get_context_file, context_exists
+            context_file = get_context_file(task_id) if context_exists(task_id) else None
+
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=request.message,
+                context_file=context_file,
+                resume_session_id=task.json_session_id
+            )
+        except SessionNotFoundError:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Tmux session for task {task_id} not found",
+            )
+    else:
+        # Legacy mode or no session ID yet - just send keys
+        try:
+            tmux.send_keys(task_id, request.message)
+        except SessionNotFoundError:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Tmux session for task {task_id} not found",
+            )
 
     return ActionResponse(
         status="ok",

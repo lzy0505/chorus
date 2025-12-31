@@ -196,6 +196,63 @@ class TmuxService:
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
         logger.info(f"Claude Code started for task {task_id}")
 
+    def start_claude_json_mode(
+        self,
+        task_id: int,
+        initial_prompt: Optional[str] = None,
+        context_file: Optional[Path] = None,
+        resume_session_id: Optional[str] = None,
+    ) -> None:
+        """Start Claude Code in JSON stream mode for event parsing.
+
+        Args:
+            task_id: The task ID.
+            initial_prompt: Optional prompt to send after Claude starts.
+            context_file: Optional path to context file for --append-system-prompt.
+            resume_session_id: Optional session ID for --resume flag.
+
+        Raises:
+            SessionNotFoundError: If the tmux session doesn't exist.
+        """
+        session_id = self.get_session_id(task_id)
+
+        if not session_exists(session_id):
+            raise SessionNotFoundError(f"Session {session_id} not found")
+
+        logger.info(f"Starting Claude Code (JSON mode) for task {task_id} in session {session_id}")
+
+        # Get shared config directory for hooks
+        config_dir = get_hooks_config_dir()
+
+        # Build the claude command with isolated config
+        env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+        oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if oauth_token:
+            env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
+        env_prefix = " ".join(env_vars)
+
+        # Build Claude command with JSON output format
+        if context_file and context_file.exists():
+            claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})" --output-format stream-json'
+            logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
+        else:
+            claude_cmd = f"{env_prefix} claude --output-format stream-json"
+
+        # Add resume flag if session ID provided
+        if resume_session_id:
+            claude_cmd += f" --resume {resume_session_id}"
+            logger.debug(f"Resuming Claude session: {resume_session_id}")
+
+        # If there's an initial prompt, pass it directly to Claude as an argument
+        if initial_prompt:
+            escaped_prompt = initial_prompt.replace('"', '\\"')
+            claude_cmd += f' "{escaped_prompt}"'
+            logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
+
+        # Send the claude command
+        _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
+        logger.info(f"Claude Code (JSON mode) started for task {task_id}")
+
     def restart_claude(
         self,
         task_id: int,
@@ -296,6 +353,33 @@ class TmuxService:
 
         result = _run_tmux(
             ["capture-pane", "-t", session_id, "-p", "-S", f"-{lines}"],
+            check=False,
+        )
+        return result.stdout if result.returncode == 0 else ""
+
+    def capture_json_events(self, task_id: int) -> str:
+        """Capture JSON events from the task's tmux session.
+
+        This method is specifically for capturing output from Claude running
+        in --output-format stream-json mode.
+
+        Args:
+            task_id: The task ID.
+
+        Returns:
+            The captured terminal output containing JSON events.
+
+        Raises:
+            SessionNotFoundError: If the session doesn't exist.
+        """
+        session_id = self.get_session_id(task_id)
+
+        if not session_exists(session_id):
+            raise SessionNotFoundError(f"Session {session_id} not found")
+
+        # Capture more lines to get all JSON events
+        result = _run_tmux(
+            ["capture-pane", "-t", session_id, "-p"],
             check=False,
         )
         return result.stdout if result.returncode == 0 else ""

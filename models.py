@@ -57,6 +57,7 @@ class Task(SQLModel, table=True):
 
     # Claude session state (ephemeral, can be restarted)
     claude_session_id: Optional[str] = Field(default=None)  # From hook SessionStart
+    json_session_id: Optional[str] = Field(default=None)  # From JSON stream for --resume
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_restarts: int = Field(default=0)
     last_output: str = Field(default="")  # Last ~2000 chars of terminal output
