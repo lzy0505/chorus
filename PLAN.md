@@ -53,7 +53,75 @@
 - [ ] Desktop notifications (`services/notifier.py`)
 - [ ] Manual testing checklist
 
+### Phase 6: UUID + GitButler Hooks 🔄
+**IN PROGRESS: Migrate to UUID-based tasks with GitButler Claude hooks**
+
+- [ ] Update `models.py` - Change Task.id from Integer to UUID
+- [ ] Update `models.py` - Replace `stack_id` with `stack_name` and `stack_cli_id`
+- [ ] Create database migration script
+- [ ] Update `services/gitbutler.py` - Add method to find stack by session/files
+- [ ] Update `services/json_monitor.py` - Call GitButler hooks on tool events
+  - [ ] Pre-tool hook before file edits
+  - [ ] Post-tool hook after file edits
+  - [ ] Stack discovery after first edit
+  - [ ] Stop hook on task completion
+- [ ] Update `services/tmux.py` - Create transcript files for hooks
+- [ ] Update all API endpoints to use UUID task IDs
+- [ ] Update frontend to handle UUID task IDs
+- [ ] Test concurrent tasks with hooks
+- [ ] Clean up old stack assignment code (marking/reassignment)
+
 ## Notes
+
+### UUID + GitButler Hooks Architecture (2025-12-31)
+
+**Major architecture change to eliminate global state and enable perfect task isolation:**
+
+**Problem Solved:**
+- Previous approach required `but mark` to assign changes to stacks (global state)
+- Concurrent tasks would conflict - only one stack could be marked at a time
+- Needed complex reassignment logic to move files between stacks
+
+**New Solution:**
+- Task ID = UUID (not auto-increment integer)
+- UUID serves triple duty: Task ID, Claude session_id, GitButler session identifier
+- GitButler hooks (`but claude pre-tool`, `post-tool`, `stop`) automatically create and manage stacks per session
+- Each task UUID → unique auto-created stack (e.g., "zl-branch-15")
+- No marking, no reassignment, no global state
+
+**Workflow:**
+1. Create task → Generate UUID
+2. Start Claude → Use UUID as session_id
+3. File edited → Call pre-tool hook with UUID
+4. File saved → Call post-tool hook with UUID
+5. GitButler auto-creates stack for that UUID (first edit only)
+6. Discover stack name from GitButler status
+7. Commit to that stack
+8. Task complete → Call stop hook
+
+**Benefits:**
+- ✅ Perfect isolation between concurrent tasks
+- ✅ No global state (no marking)
+- ✅ No reassignment logic needed
+- ✅ Clean 1:1 mapping: UUID = Session = Stack
+- ✅ Simpler code, more reliable
+
+### JSON Monitoring Migration (2025-12-31)
+
+Completed migration from hook-based monitoring to JSON event parsing:
+
+**What Changed:**
+- Removed `services/hooks.py`, `api/hooks.py`, `services/status_detector.py`
+- Added `services/json_parser.py` and `services/monitor.py` (JSON-based)
+- Claude sessions now launch with `--output-format stream-json`
+- Status detection via structured JSON events (deterministic, no regex)
+- Session resumption via `json_session_id` extracted from events
+
+**Benefits:**
+- Instant, deterministic event detection (no polling fragility)
+- Structured data instead of regex pattern matching
+- Built-in session resumption support
+- Simpler architecture, fewer moving parts
 
 ### Logging Implementation (2025-12-30)
 
