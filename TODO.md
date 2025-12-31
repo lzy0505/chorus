@@ -1,44 +1,49 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-31 01:36
+> Auto-updated by Claude Code. Last update: 2025-12-31 11:57
 
-### GitButler Hook Integration (Priority: High)
-**Goal:** Complete GitButler hook integration for auto-stack creation per task
+### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
-**UUID Migration - COMPLETED ✅ (2025-12-31)**
-- ✅ Updated `models.py` - Task.id is now UUID (primary key)
-- ✅ Updated `models.py` - Added `stack_name` and `stack_cli_id` fields
-- ✅ Database supports UUID primary keys
-- ✅ All API endpoints accept/return UUID task IDs
-- ✅ Frontend templates handle UUID task IDs
-- ✅ DocumentReference.task_id updated to UUID foreign key
+**Goal:** Implement GitButler hooks where Task UUID = GitButler session (persistent across Claude restarts)
 
-**GitButler Hook Methods - COMPLETED ✅ (2025-12-31)**
-- ✅ Implemented `discover_stack_for_session()` in `services/gitbutler.py:556`
-- ✅ Implemented `call_pre_tool_hook()` in `services/gitbutler.py:435`
-- ✅ Implemented `call_post_tool_hook()` in `services/gitbutler.py:475`
-- ✅ Implemented `call_stop_hook()` in `services/gitbutler.py:522`
-- ✅ Tests written in `tests/test_gitbutler.py`
+**Architecture - FINALIZED ✅ (2025-12-31)**
+- ✅ Task UUID = GitButler session_id (persistent)
+- ✅ Claude session UUID = separate (for --resume, changes on restart)
+- ✅ One transcript per task (not per Claude session)
+- ✅ Hooks use task UUID consistently
+- ✅ Stop hook only on task completion (not Claude restart)
+- ✅ Documentation: `IMPLEMENTATION_PLAN.md` created
+- ✅ `DESIGN.md` updated with new architecture
 
-**Hook Integration - REMAINING WORK ❌**
-- [ ] Update `services/json_monitor.py:_handle_event()`:
-  - [ ] Extract file_path from tool_use events
-  - [ ] Call `gitbutler.call_pre_tool_hook()` on tool_use (Edit/Write/MultiEdit)
-  - [ ] Call `gitbutler.call_post_tool_hook()` on tool_result success
-  - [ ] Call `gitbutler.discover_stack_for_session()` after first successful edit
-  - [ ] Save discovered stack_name and stack_cli_id to task
-- [ ] Update `services/tmux.py` (task start):
-  - [ ] Create transcript directory: `/tmp/chorus/task-{uuid}/`
-  - [ ] Write transcript file: `{"type":"user","cwd":"{project_root}"}`
-  - [ ] Pass transcript path to Claude session
-- [ ] Update `api/tasks.py` (task completion):
-  - [ ] Call `gitbutler.call_stop_hook()` with task UUID and transcript path
-  - [ ] Cleanup transcript directory after task completes
-- [ ] Integration testing:
-  - [ ] Create two concurrent tasks
-  - [ ] Edit files in both sessions
-  - [ ] Verify GitButler auto-creates separate stacks (zl-branch-*)
-  - [ ] Verify commits go to correct stacks
+**Foundation - COMPLETED ✅ (2025-12-31)**
+- ✅ UUID Migration: Task.id is UUID primary key
+- ✅ Database fields: `stack_name`, `stack_cli_id`
+- ✅ Hook methods: `call_pre_tool_hook()`, `call_post_tool_hook()`, `call_stop_hook()`
+- ✅ Stack discovery: `discover_stack_for_session()`
+- ✅ Tests: `tests/test_gitbutler.py`
+
+**Implementation - IN PROGRESS 🔄**
+- [ ] `services/tmux.py`:
+  - [x] Add helper functions (get_transcript_dir, create_transcript_file)
+  - [ ] Update `create_task_session()` to create transcript
+  - [ ] Add transcript cleanup on session kill
+- [ ] `models.py`:
+  - [ ] Add `claude_session_id: Optional[str]` field (for --resume)
+- [ ] `services/json_monitor.py`:
+  - [ ] Add GitButlerService integration
+  - [ ] Call `pre_tool_hook()` on Edit/Write/MultiEdit tool_use
+  - [ ] Call `post_tool_hook()` on successful tool_result
+  - [ ] Discover and save stack after first edit
+  - [ ] Extract Claude session_id for --resume
+- [ ] `api/tasks.py`:
+  - [ ] Call `stop_hook()` on task completion
+  - [ ] Cleanup transcript directory
+
+**Testing - PENDING ⏳**
+- [ ] Unit tests for transcript creation
+- [ ] Unit tests for hook integration
+- [ ] Integration: single task with Claude restart
+- [ ] Integration: concurrent tasks with separate stacks
 
 ## Up Next
 

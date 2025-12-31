@@ -4,12 +4,15 @@ Each task gets its own tmux session where Claude Code runs.
 The tmux session persists even if Claude crashes/hangs, allowing restarts.
 """
 
+import json
 import os
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 from config import get_config
 from services.hooks import get_hooks_config_dir
@@ -69,6 +72,62 @@ def session_exists(session_id: str) -> bool:
     """Check if a tmux session exists."""
     result = _run_tmux(["has-session", "-t", session_id], check=False)
     return result.returncode == 0
+
+
+def get_transcript_dir(task_id: UUID) -> Path:
+    """Get the transcript directory path for a task.
+
+    Args:
+        task_id: The task UUID.
+
+    Returns:
+        Path to transcript directory: /tmp/chorus/task-{uuid}/
+    """
+    return Path(f"/tmp/chorus/task-{task_id}")
+
+
+def create_transcript_file(task_id: UUID, project_root: str) -> Path:
+    """Create a minimal transcript file for GitButler hooks.
+
+    GitButler hooks expect a transcript directory containing a session transcript.
+    We create a minimal JSONL file with one user message entry.
+
+    Args:
+        task_id: The task UUID (used as GitButler session_id).
+        project_root: The project working directory.
+
+    Returns:
+        Path to the created transcript file.
+    """
+    transcript_dir = get_transcript_dir(task_id)
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+
+    transcript_file = transcript_dir / "transcript.json"
+
+    # Create minimal transcript entry (JSONL format - one JSON object per line)
+    entry = {
+        "parentUuid": None,
+        "isSidechain": False,
+        "userType": "external",
+        "cwd": project_root,
+        "sessionId": str(task_id),
+        "version": "1.0.0",
+        "gitBranch": "",
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": "Task initialized"
+        },
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+    # Write as JSONL (one JSON object per line)
+    with open(transcript_file, "w") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    logger.debug(f"Created transcript file: {transcript_file}")
+    return transcript_file
 
 
 class TmuxService:
