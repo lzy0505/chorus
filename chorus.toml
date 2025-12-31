@@ -57,5 +57,5 @@ log_api_requests = true  # Log API endpoint calls
 
 [monitoring]
 # JSON-based monitoring (new architecture)
-use_json_mode = false  # Set to true to use JSON event parsing instead of hooks
-poll_interval = 1.0    # Seconds between monitoring cycles
+use_json_mode = true  # Set to true to use JSON event parsing instead of hooks
+poll_interval = 1.0   # Seconds between monitoring cycles

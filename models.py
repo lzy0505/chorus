@@ -39,26 +39,26 @@ class Task(SQLModel, table=True):
     """A unit of work with its own tmux process and GitButler stack.
 
     This is the primary entity in Chorus. Each task:
+    - Has a UUID that serves triple duty: Task ID, Claude session_id, GitButler session identifier
     - Runs in its own tmux process for isolation
-    - Is attached to a GitButler stack (virtual branch)
-    - Can have multiple Claude sessions (restartable)
+    - Is attached to a GitButler auto-created stack (discovered after first file edit)
+    - Can have multiple Claude sessions (restartable with --resume)
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     title: str
     description: str = Field(default="")
     priority: int = Field(default=0)
     status: TaskStatus = Field(default=TaskStatus.pending)
 
-    # GitButler integration
-    stack_id: Optional[str] = Field(default=None)    # CLI ID, e.g., "tm", "zl"
-    stack_name: Optional[str] = Field(default=None)  # Full name, e.g., "task-1-auth"
+    # GitButler integration (auto-discovered after first file edit)
+    stack_cli_id: Optional[str] = Field(default=None)    # CLI ID, e.g., "u0", discovered via hooks
+    stack_name: Optional[str] = Field(default=None)      # Auto-created name, e.g., "zl-branch-15"
 
     # tmux process
-    tmux_session: Optional[str] = Field(default=None)  # e.g., "task-1"
+    tmux_session: Optional[str] = Field(default=None)  # e.g., "task-{uuid}"
 
     # Claude session state (ephemeral, can be restarted)
-    claude_session_id: Optional[str] = Field(default=None)  # From hook SessionStart
-    json_session_id: Optional[str] = Field(default=None)  # From JSON stream for --resume
+    # Note: task.id (UUID) is used as Claude's session_id for --resume and GitButler hooks
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_restarts: int = Field(default=0)
     last_output: str = Field(default="")  # Last ~2000 chars of terminal output
