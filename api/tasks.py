@@ -366,7 +366,7 @@ async def restart_claude(
                 task_id,
                 initial_prompt=kickoff_message,
                 context_file=context_file,
-                resume_session_id=task.json_session_id
+                resume_session_id=task.claude_session_id
             )
         else:
             # Use legacy restart method
@@ -425,7 +425,7 @@ async def send_message(
     from config import get_config
     config = get_config()
 
-    if config.monitoring.use_json_mode and task.json_session_id:
+    if config.monitoring.use_json_mode and task.claude_session_id:
         # In JSON mode, use --resume to continue the session
         try:
             # Get context file if it exists
@@ -436,7 +436,7 @@ async def send_message(
                 task_id,
                 initial_prompt=request.message,
                 context_file=context_file,
-                resume_session_id=task.json_session_id
+                resume_session_id=task.claude_session_id
             )
         except SessionNotFoundError:
             raise HTTPException(
