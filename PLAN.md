@@ -54,22 +54,30 @@
 - [ ] Manual testing checklist
 
 ### Phase 6: UUID + GitButler Hooks 🔄
-**IN PROGRESS: Migrate to UUID-based tasks with GitButler Claude hooks**
+**PARTIALLY COMPLETE: UUID migration done, hook integration pending**
 
-- [ ] Update `models.py` - Change Task.id from Integer to UUID
-- [ ] Update `models.py` - Replace `stack_id` with `stack_name` and `stack_cli_id`
-- [ ] Create database migration script
-- [ ] Update `services/gitbutler.py` - Add method to find stack by session/files
-- [ ] Update `services/json_monitor.py` - Call GitButler hooks on tool events
-  - [ ] Pre-tool hook before file edits
-  - [ ] Post-tool hook after file edits
+**Completed:**
+- [x] Update `models.py` - Change Task.id from Integer to UUID ✅
+- [x] Update `models.py` - Replace `stack_id` with `stack_name` and `stack_cli_id` ✅
+- [x] Database supports UUID primary keys ✅
+- [x] Update `services/gitbutler.py` - Add hook methods ✅
+  - [x] `discover_stack_for_session()` ✅
+  - [x] `call_pre_tool_hook()` ✅
+  - [x] `call_post_tool_hook()` ✅
+  - [x] `call_stop_hook()` ✅
+- [x] Update all API endpoints to use UUID task IDs ✅
+- [x] Update frontend to handle UUID task IDs ✅
+
+**Remaining:**
+- [ ] Update `services/json_monitor.py` - Integrate GitButler hooks
+  - [ ] Call pre-tool hook before file edits
+  - [ ] Call post-tool hook after file edits
   - [ ] Stack discovery after first edit
-  - [ ] Stop hook on task completion
+  - [ ] Save discovered stack to task
 - [ ] Update `services/tmux.py` - Create transcript files for hooks
-- [ ] Update all API endpoints to use UUID task IDs
-- [ ] Update frontend to handle UUID task IDs
+- [ ] Update `api/tasks.py` - Call stop hook on task completion
 - [ ] Test concurrent tasks with hooks
-- [ ] Clean up old stack assignment code (marking/reassignment)
+- [ ] Clean up old stack marking code (if any remains)
 
 ## Notes
 
@@ -108,20 +116,23 @@
 
 ### JSON Monitoring Migration (2025-12-31)
 
-Completed migration from hook-based monitoring to JSON event parsing:
+Completed migration from **Claude Code hooks** (SessionStart, ToolUse, etc.) to JSON event parsing:
 
 **What Changed:**
-- Removed `services/hooks.py`, `api/hooks.py`, `services/status_detector.py`
-- Added `services/json_parser.py` and `services/monitor.py` (JSON-based)
 - Claude sessions now launch with `--output-format stream-json`
 - Status detection via structured JSON events (deterministic, no regex)
-- Session resumption via `json_session_id` extracted from events
+- Session resumption via `session_id` extracted from JSON events
+- **Note:** Legacy files `services/hooks.py` and `services/status_detector.py` still exist but are only used in legacy mode (`use_json_mode = false`)
 
 **Benefits:**
-- Instant, deterministic event detection (no polling fragility)
+- Instant, deterministic event detection
 - Structured data instead of regex pattern matching
 - Built-in session resumption support
-- Simpler architecture, fewer moving parts
+- Simpler architecture
+
+**Important Terminology Distinction:**
+- **Claude Code hooks** = OLD monitoring method (SessionStart, ToolUse callbacks) - replaced by JSON mode
+- **GitButler hooks** = `but claude pre-tool/post-tool/stop` - for stack isolation, NOT yet integrated
 
 ### Logging Implementation (2025-12-30)
 

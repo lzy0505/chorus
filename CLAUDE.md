@@ -55,18 +55,15 @@ chorus/
 
 ## Architecture
 
-Chorus supports two monitoring modes (configurable via `chorus.toml`):
+Chorus uses **JSON-based monitoring** for Claude Code sessions. Set `monitoring.use_json_mode = true` in `chorus.toml` (recommended).
 
-### JSON Mode (Recommended - New Architecture)
-
-Set `monitoring.use_json_mode = true` in `chorus.toml`.
+### JSON Monitoring (Current Architecture)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ services/tmux.py                                             │
-│ └─ start_claude_json_mode() → `claude --output-format       │
-│                                 stream-json`                 │
-│ └─ capture_json_events() → Parse JSON from tmux             │
+│ └─ start_claude() → `claude --output-format stream-json`    │
+│ └─ capture_json_events() → Capture JSON from tmux           │
 └─────────────────────────────────────────────────────────────┘
          │
          ▼
@@ -86,16 +83,23 @@ Set `monitoring.use_json_mode = true` in `chorus.toml`.
 ```
 
 **Key Features:**
-- **Deterministic event detection** — Parse structured JSON events
+- **Deterministic event detection** — Parse structured JSON events from Claude
 - **Session resumption** — Extract `session_id` from JSON for `--resume`
 - **Real-time status updates** — Event-driven architecture
 - **More reliable** — No regex pattern matching, structured data
 
-### Legacy Hook Mode
+**Important: Two Different "Hooks" Systems**
 
-Set `monitoring.use_json_mode = false` (default for compatibility).
+Chorus uses the term "hooks" in two different contexts:
 
-Uses Claude Code hooks (SessionStart, ToolUse, etc.) + status polling for detection. See git history for hook-based architecture details.
+1. **Claude Code hooks** (DEPRECATED) — Callbacks like SessionStart, ToolUse that Claude Code can trigger. Replaced by JSON monitoring.
+2. **GitButler hooks** (IN PROGRESS) — CLI commands (`but claude pre-tool/post-tool/stop`) for stack isolation. Methods implemented but not yet integrated.
+
+### Legacy Claude Code Hook Mode
+
+Set `monitoring.use_json_mode = false` for compatibility.
+
+Uses Claude Code's SessionStart/ToolUse callbacks + status polling. Legacy files (`services/hooks.py`, `services/status_detector.py`) still exist for this mode but JSON mode is recommended.
 
 ## Development
 

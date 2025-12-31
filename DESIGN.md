@@ -472,6 +472,19 @@ data: {"document_id": 1, "path": "docs/spec.md"}
 
 ## Component Implementation Details
 
+### Important: Two "Hooks" Systems
+
+Chorus documentation references two different "hooks" systems that serve different purposes:
+
+| System | Purpose | Status | Location |
+|--------|---------|--------|----------|
+| **Claude Code hooks** | Monitor Claude sessions via callbacks (SessionStart, ToolUse, etc.) | DEPRECATED - replaced by JSON monitoring | `services/hooks.py` (legacy) |
+| **GitButler hooks** | CLI commands for stack isolation (`but claude pre-tool/post-tool/stop`) | Methods implemented, not yet integrated | `services/gitbutler.py` |
+
+**Current Architecture:**
+- Monitoring: JSON-based (reads `stream-json` output)
+- GitButler: CLI hooks defined but not yet called by `json_monitor.py`
+
 ### JSON Monitor Service
 
 **Purpose:** Parse JSON events from Claude Code's `stream-json` output to track task status and trigger GitButler commits.
@@ -526,7 +539,9 @@ class Monitor:
 
 ### GitButler Integration
 
-GitButler provides **Claude Code hooks** that automatically create and manage stacks (virtual branches) per Claude session. Chorus leverages these hooks to achieve perfect task isolation without global state.
+GitButler provides **CLI hooks** (`but claude pre-tool/post-tool/stop`) that automatically create and manage stacks (virtual branches) per Claude session. Chorus will leverage these hooks to achieve perfect task isolation without global state.
+
+**Note:** These are NOT Claude Code's SessionStart/ToolUse callbacks (which have been replaced by JSON monitoring). These are GitButler-specific CLI commands.
 
 #### How GitButler Hooks Work
 
