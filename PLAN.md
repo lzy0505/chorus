@@ -11,91 +11,31 @@
 - [x] Database setup
 - [x] tmux service wrapper (basic commands)
 
-### Phase 2: Task API + Hooks 🔄
+### Phase 2: Task API + JSON Monitoring ✅
 
-**Priority: tmux, hooks, and task lifecycle management**
+**Completed: Full task lifecycle with JSON-based monitoring**
 
-- [x] Update `services/tmux.py` - Task-centric tmux operations ✅
-  - [x] `create_task_session(task_id)` - Create tmux for a task
-  - [x] `start_claude(task_id)` - Launch Claude in task's tmux
-  - [x] `restart_claude(task_id)` - Kill and relaunch Claude
-  - [x] `kill_task_session(task_id)` - Kill task's tmux
-  - [x] `capture_output(task_id)` - Get terminal output
-  - [x] `send_keys(task_id, text)` - Send input to Claude
-
-- [x] `services/hooks.py` - Claude Code hooks integration ✅
-  - [x] `generate_hooks_config()` - Generate shared .claude/settings.json (task-agnostic)
-  - [x] `ensure_hooks_config()` - Idempotent setup in `/tmp/chorus/hooks/.claude/`
-  - [x] `HookPayload` dataclass for parsing hook events
-  - [x] `HooksService` class for hook management
-  - [x] Session-to-task mapping via `claude_session_id`
-
-- [x] `api/hooks.py` - Hook event endpoints ✅
-  - [x] `POST /api/hooks/sessionstart` - SessionStart event → map session to task
-  - [x] `POST /api/hooks/stop` - Stop event → claude_status = idle
-  - [x] `POST /api/hooks/permissionrequest` - PermissionRequest → status = waiting
-  - [x] `POST /api/hooks/sessionend` - SessionEnd → claude_status = stopped
-  - [x] `POST /api/hooks/notification` - Notification → confirms idle
-
+- [x] `services/tmux.py` - Task-centric tmux operations ✅
+- [x] `services/json_parser.py` - Parse `stream-json` output ✅
+- [x] `services/monitor.py` - JSON event monitoring ✅
 - [x] `services/gitbutler.py` - GitButler CLI integration ✅
-  - [x] `create_stack(name)` - Create stack via `but branch new -j`
-  - [x] `commit_to_stack(stack)` - Commit to stack via `but commit -c`
-  - [x] `get_status()` - Get workspace status via `but status -j`
-  - [x] `delete_stack(stack)` - Delete stack via `but branch delete --force`
-  - [x] `get_stack_commits(stack)` - Get commits via `but branch show -j`
-
-- [x] `api/hooks.py` - Add tooluse endpoint ✅
-  - [x] `POST /api/hooks/posttooluse` - After file edit, commit to task's stack
-
 - [x] `api/tasks.py` - Task lifecycle endpoints ✅
-  - [x] `POST /api/tasks` - Create task
-  - [x] `GET /api/tasks` - List tasks
-  - [x] `GET /api/tasks/{id}` - Get task details
-  - [x] `PUT /api/tasks/{id}` - Update task
-  - [x] `POST /api/tasks/{id}/start` - Start task (stack + tmux + Claude)
-  - [x] `POST /api/tasks/{id}/restart-claude` - Restart Claude session
-  - [x] `POST /api/tasks/{id}/send` - Send message to Claude
-  - [x] `POST /api/tasks/{id}/respond` - Respond to permission prompt
-  - [x] `POST /api/tasks/{id}/complete` - Complete task (finalize, GitButler auto-commits)
-  - [x] `POST /api/tasks/{id}/fail` - Mark task as failed, optionally delete stack
-  - [x] `DELETE /api/tasks/{id}` - Delete pending/failed task
-  - [x] `GET /api/tasks/{id}/output` - Get terminal output
-
 - [x] `api/events.py` - SSE endpoint ✅
-  - [x] Event queue
-  - [x] `task_status` events
-  - [x] `claude_status` events
+- [x] JSON session resumption with `--resume` ✅
 
-### Phase 4: Dashboard 🔄
+### Phase 3: Dashboard ✅
 - [x] `templates/base.html` - Base layout with htmx/SSE ✅
 - [x] `templates/dashboard.html` - Main task-centric dashboard ✅
 - [x] `templates/partials/` - Task list, detail, item ✅
 - [x] `api/dashboard.py` - HTML partial routes ✅
 - [x] `static/style.css` - Dark theme styling ✅
 
-### Phase 3: Document API (Backlog)
-- [ ] `services/documents.py` - Document manager
-  - [ ] File discovery (glob patterns)
-  - [ ] Outline parsing
-  - [ ] Section extraction
+### Phase 4: Document API (Future)
+- [ ] `services/documents.py` - Document manager with file discovery
 - [ ] `api/documents.py` - Document endpoints
-  - [ ] List documents
-  - [ ] Get document content
-  - [ ] Get line range
-- [ ] Document reference endpoints
-  - [ ] Create reference
-  - [ ] List references for task
-  - [ ] Delete reference
+- [ ] Document reference endpoints for task context
 
-### Phase 4: Dashboard
-- [ ] `templates/base.html` - Base layout with htmx/SSE
-- [ ] `templates/dashboard.html` - Main task-centric dashboard
-- [ ] `templates/partials/tasks.html` - Task list with actions
-- [ ] `templates/partials/documents.html` - Document browser
-- [ ] htmx interactions for all task actions
-- [ ] SSE integration for real-time updates
-
-### Phase 5: Polish ✅
+### Phase 5: Polish & Reliability ✅
 - [x] Error handling (2025-12-30)
   - [x] tmux session not found
   - [x] Claude crash detection
@@ -113,7 +53,75 @@
 - [ ] Desktop notifications (`services/notifier.py`)
 - [ ] Manual testing checklist
 
+### Phase 6: UUID + GitButler Hooks 🔄
+**IN PROGRESS: Migrate to UUID-based tasks with GitButler Claude hooks**
+
+- [ ] Update `models.py` - Change Task.id from Integer to UUID
+- [ ] Update `models.py` - Replace `stack_id` with `stack_name` and `stack_cli_id`
+- [ ] Create database migration script
+- [ ] Update `services/gitbutler.py` - Add method to find stack by session/files
+- [ ] Update `services/json_monitor.py` - Call GitButler hooks on tool events
+  - [ ] Pre-tool hook before file edits
+  - [ ] Post-tool hook after file edits
+  - [ ] Stack discovery after first edit
+  - [ ] Stop hook on task completion
+- [ ] Update `services/tmux.py` - Create transcript files for hooks
+- [ ] Update all API endpoints to use UUID task IDs
+- [ ] Update frontend to handle UUID task IDs
+- [ ] Test concurrent tasks with hooks
+- [ ] Clean up old stack assignment code (marking/reassignment)
+
 ## Notes
+
+### UUID + GitButler Hooks Architecture (2025-12-31)
+
+**Major architecture change to eliminate global state and enable perfect task isolation:**
+
+**Problem Solved:**
+- Previous approach required `but mark` to assign changes to stacks (global state)
+- Concurrent tasks would conflict - only one stack could be marked at a time
+- Needed complex reassignment logic to move files between stacks
+
+**New Solution:**
+- Task ID = UUID (not auto-increment integer)
+- UUID serves triple duty: Task ID, Claude session_id, GitButler session identifier
+- GitButler hooks (`but claude pre-tool`, `post-tool`, `stop`) automatically create and manage stacks per session
+- Each task UUID → unique auto-created stack (e.g., "zl-branch-15")
+- No marking, no reassignment, no global state
+
+**Workflow:**
+1. Create task → Generate UUID
+2. Start Claude → Use UUID as session_id
+3. File edited → Call pre-tool hook with UUID
+4. File saved → Call post-tool hook with UUID
+5. GitButler auto-creates stack for that UUID (first edit only)
+6. Discover stack name from GitButler status
+7. Commit to that stack
+8. Task complete → Call stop hook
+
+**Benefits:**
+- ✅ Perfect isolation between concurrent tasks
+- ✅ No global state (no marking)
+- ✅ No reassignment logic needed
+- ✅ Clean 1:1 mapping: UUID = Session = Stack
+- ✅ Simpler code, more reliable
+
+### JSON Monitoring Migration (2025-12-31)
+
+Completed migration from hook-based monitoring to JSON event parsing:
+
+**What Changed:**
+- Removed `services/hooks.py`, `api/hooks.py`, `services/status_detector.py`
+- Added `services/json_parser.py` and `services/monitor.py` (JSON-based)
+- Claude sessions now launch with `--output-format stream-json`
+- Status detection via structured JSON events (deterministic, no regex)
+- Session resumption via `json_session_id` extracted from events
+
+**Benefits:**
+- Instant, deterministic event detection (no polling fragility)
+- Structured data instead of regex pattern matching
+- Built-in session resumption support
+- Simpler architecture, fewer moving parts
 
 ### Logging Implementation (2025-12-30)
 
