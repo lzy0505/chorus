@@ -108,44 +108,80 @@ class JsonMonitor:
 
         match event_type:
             case "session_start":
-                return f"[{timestamp}] Session started"
+                return f"[{timestamp}] 🚀 Session started"
 
             case "tool_use":
                 tool_name = event.data.get("toolName", "unknown")
                 tool_input = event.data.get("toolInput", {})
                 file_path = tool_input.get("file_path", "")
+
+                # Build detailed tool info
+                details = []
                 if file_path:
-                    return f"[{timestamp}] 🔧 {tool_name}: {file_path}"
+                    details.append(f"file: {file_path}")
+
+                # Add other relevant parameters
+                for key in ["pattern", "command", "old_string", "new_string", "content"]:
+                    if key in tool_input and tool_input[key]:
+                        value = str(tool_input[key])
+                        if len(value) > 50:
+                            value = value[:50] + "..."
+                        details.append(f"{key}: {value}")
+
+                detail_str = ", ".join(details) if details else ""
+                if detail_str:
+                    return f"[{timestamp}] 🔧 {tool_name} → {detail_str}"
                 else:
                     return f"[{timestamp}] 🔧 {tool_name}"
 
             case "tool_result":
                 is_error = event.data.get("isError", False)
                 if is_error:
+                    error_content = event.data.get("content", "")
+                    if isinstance(error_content, str) and error_content:
+                        error_preview = error_content[:100] + "..." if len(error_content) > 100 else error_content
+                        return f"[{timestamp}] ❌ Tool failed: {error_preview}"
                     return f"[{timestamp}] ❌ Tool failed"
                 else:
+                    # Show brief result preview if available
+                    content = event.data.get("content", "")
+                    if isinstance(content, str) and content and len(content) < 200:
+                        return f"[{timestamp}] ✅ Tool completed: {content[:100]}"
                     return f"[{timestamp}] ✅ Tool completed"
 
             case "text":
                 content = event.data.get("text", "")
-                # Truncate long text
-                if len(content) > 100:
-                    content = content[:100] + "..."
+                # Show more text, split into lines if needed
+                if len(content) > 200:
+                    content = content[:200] + "..."
                 return f"[{timestamp}] 💬 {content}"
 
+            case "assistant":
+                # Assistant thinking/response
+                return f"[{timestamp}] 🤖 Claude responding..."
+
             case "result":
+                # Show stop reason if available
+                stop_reason = event.data.get("stopReason", "")
+                if stop_reason:
+                    return f"[{timestamp}] ✓ Response complete ({stop_reason})"
                 return f"[{timestamp}] ✓ Response complete"
 
             case "permission_request":
-                return f"[{timestamp}] ⚠️  Permission requested"
+                prompt = event.data.get("prompt", "Permission requested")
+                return f"[{timestamp}] ⚠️  {prompt}"
 
             case "error":
                 error_msg = event.data.get("error", {}).get("message", "Unknown error")
                 return f"[{timestamp}] ❌ Error: {error_msg}"
 
+            case "user":
+                # User input/feedback
+                return f"[{timestamp}] 👤 User response received"
+
             case _:
-                # Skip unknown events
-                return None
+                # Log unknown events for debugging
+                return f"[{timestamp}] 📝 {event_type}"
 
     async def _monitor_task(self, task_id: UUID):
         """Monitor a specific task for JSON events.
