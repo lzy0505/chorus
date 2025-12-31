@@ -450,8 +450,10 @@ class TmuxService:
             raise SessionNotFoundError(f"Session {session_id} not found")
 
         # Capture more lines to get all JSON events
+        # -S - captures entire scrollback history (up to tmux's history limit)
+        # -p prints to stdout
         result = _run_tmux(
-            ["capture-pane", "-t", session_id, "-p"],
+            ["capture-pane", "-t", session_id, "-p", "-S", "-"],
             check=False,
         )
         return result.stdout if result.returncode == 0 else ""
