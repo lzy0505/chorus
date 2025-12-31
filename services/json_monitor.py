@@ -66,8 +66,11 @@ class JsonMonitor:
 
         while self._running:
             try:
-                # Get all running tasks from database
-                statement = select(Task).where(Task.status == "running")
+                # Get all running and waiting tasks from database
+                from models import TaskStatus
+                statement = select(Task).where(
+                    (Task.status == TaskStatus.running) | (Task.status == TaskStatus.waiting)
+                )
                 tasks = self.db.exec(statement).all()
 
                 for task in tasks:

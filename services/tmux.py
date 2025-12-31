@@ -203,7 +203,7 @@ class TmuxService:
 
     def start_claude(
         self,
-        task_id: int,
+        task_id: UUID,
         initial_prompt: Optional[str] = None,
         context_file: Optional[Path] = None,
     ) -> None:
@@ -263,7 +263,7 @@ class TmuxService:
 
     def start_claude_json_mode(
         self,
-        task_id: int,
+        task_id: UUID,
         initial_prompt: Optional[str] = None,
         context_file: Optional[Path] = None,
         resume_session_id: Optional[str] = None,
