@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
+from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
 
@@ -86,7 +87,7 @@ class DocumentReference(SQLModel, table=True):
     """A reference to specific lines in a document, linked to a task."""
     id: Optional[int] = Field(default=None, primary_key=True)
     document_id: int = Field(foreign_key="document.id")
-    task_id: int = Field(foreign_key="task.id")  # Now required (was optional)
+    task_id: UUID = Field(foreign_key="task.id")  # References Task.id (UUID)
     start_line: int
     end_line: int
     note: Optional[str] = Field(default=None)

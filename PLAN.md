@@ -2,7 +2,7 @@
 
 > Reference: See `design.md` for full specification
 
-## Current Phase: Phase 2 - Task API + Monitor (tmux focus) 🔄
+## Current Phase: UUID + GitButler Hooks Migration 🔄
 
 ### Phase 1: Core Foundation ✅
 - [x] Project structure
@@ -145,62 +145,46 @@ Added comprehensive logging system for debugging external tool interactions:
 **Usage:**
 Set `level = "DEBUG"` in `chorus.toml` to see full subprocess execution details when troubleshooting.
 
-### Architecture Decision: Hooks over Polling (2025-12-29)
-Changed from terminal polling to Claude Code hooks for status detection:
-- **Before**: Poll tmux output every 1s, regex pattern matching for status
-- **After**: Claude Code hooks fire events, POST to Chorus API instantly
-
-Benefits:
-- Instant status updates (no 1s polling delay)
-- Deterministic events (no fragile pattern matching)
-- Lower resource usage
-- Access to session metadata (transcript_path, session_id)
-
-### Architecture Decision: Shared Hooks Config (2025-12-30)
-Changed from per-task hooks to shared project-level hooks:
-- **Before**: Each task had its own `/tmp/chorus/task-{id}/.claude/settings.json`
-- **After**: All sessions share `/tmp/chorus/hooks/.claude/settings.json`
-
-Key insight: Hooks config is task-agnostic — it just forwards events to the Chorus API with `session_id`. The API looks up tasks by `session_id`, not by config location.
-
-Benefits:
-- Simpler: Single config for all sessions
-- Idempotent: `ensure_hooks()` only writes if missing
-- No cleanup needed: Task completion doesn't delete shared config
-- Same isolation: Still outside project directory (`/tmp/chorus/hooks/`)
-
-### Architecture Decision: Task-Centric (2025-12-29)
+### Architecture Decision: Task-Centric Design (2025-12-29)
 Changed from session-centric to task-centric design:
 - **Before**: Session (tmux) was primary, Task was assigned to Session
 - **After**: Task is primary, each Task has its own tmux + GitButler stack
 
 Key insight: Claude sessions are ephemeral (can hang, lose context) but the Task and its tmux persist. This allows restarting Claude without losing task progress.
 
-### GitButler Integration
-Using GitButler CLI (`but`):
-- `but branch new {name} -j` - Create a new stack for a task
-- `but commit -c {stack}` - Commit to specific stack
-- `but status -j` - Get workspace status (JSON)
-- `but branch show {stack} -j` - Get commits in a stack
-- `but branch delete {stack} --force` - Delete a stack
+### GitButler Integration (Updated 2025-12-31)
 
-**Per-Task Stack Assignment (Chorus-managed):**
-Chorus tracks `task.stack_name` in the database. When a file edit occurs:
-1. PostToolUse hook notifies Chorus (`/api/hooks/tooluse`)
-2. Chorus looks up task by `session_id` → gets `stack_name`
-3. Chorus runs `but commit -c {stack_name}`
+**Using GitButler Claude Hooks:**
+
+```bash
+# Called by Chorus automatically during file edits
+echo '{"session_id":"task-uuid","transcript_path":"/tmp/...","hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"..."}}' | but claude pre-tool -j
+
+echo '{"session_id":"task-uuid","transcript_path":"/tmp/...","hook_event_name":"PostToolUse","tool_name":"Edit","tool_input":{"file_path":"..."},"tool_response":{"filePath":"...","structuredPatch":[]}}' | but claude post-tool -j
+
+echo '{"session_id":"task-uuid","transcript_path":"/tmp/...","hook_event_name":"SessionEnd"}' | but claude stop -j
+
+# Traditional commands still used for commits and queries
+but commit {stack-name}              # Commit to auto-created stack
+but status -j                        # Get workspace status (discover stacks)
+but branch delete {stack} --force    # Cleanup if needed
+```
+
+**Per-Task Stack Assignment (Hook-managed):**
+GitButler automatically creates and assigns stacks based on session UUID:
+
+1. File edit occurs → Chorus calls `but claude pre-tool` with task UUID
+2. File saved → Chorus calls `but claude post-tool` with task UUID
+3. GitButler creates stack for this UUID (e.g., "zl-branch-15") on first edit
+4. Chorus discovers stack name via `but status -j`
+5. Chorus commits: `but commit {discovered-stack-name}`
 
 ```
-tmux-1 (task 1): Claude edits → Chorus → but commit -c task-1-auth
-tmux-2 (task 2): Claude edits → Chorus → but commit -c task-2-api
+tmux-1 (UUID-aaa): Claude edits → pre/post hooks → GitButler creates zl-branch-10
+tmux-2 (UUID-bbb): Claude edits → pre/post hooks → GitButler creates zl-branch-11
 ```
 
-**Task Lifecycle:**
-```
-Start:  but branch new → store stack_name in DB → start Claude
-Complete: kill tmux
-Fail:   optionally but branch delete → kill tmux
-```
+**No marking, no reassignment, perfect isolation.**
 
 ### Removed
 - `Session` model (replaced by task.tmux_session field)
