@@ -552,9 +552,10 @@ but commit -c task-1-auth           but commit -c task-2-api
 
 **How it works:**
 1. Chorus tracks `task.stack_name` in the database
-2. A lightweight PostToolUse hook notifies Chorus after file edits
-3. Chorus looks up the task by `session_id` and retrieves `stack_name`
-4. Chorus runs `but commit -c {stack_name}` to commit to the correct stack
+2. JSON Monitor parses `stream-json` events from Claude's output
+3. On `tool_result` event for Edit/Write tools, Chorus commits
+4. Chorus looks up the task by `session_id` and retrieves `stack_name`
+5. Chorus runs `but commit -c {stack_name}` to commit to the correct stack
 
 **Task Lifecycle:**
 ```
@@ -573,10 +574,12 @@ Task Fail:
 
 **Chorus + GitButler Architecture:**
 ```
-Claude Code (in tmux)
+Claude Code (in tmux with --output-format stream-json)
     ↓ Edit/Write tool
-PostToolUse hook
-    ↓ curl POST /api/hooks/tooluse (lightweight)
+    ↓ JSON event: tool_result
+JSON Monitor (polls tmux output)
+    ↓ Parse JSON events
+    ↓ Detect file edits
 Chorus API
     ↓ Look up task by session_id → get stack_name
     ↓ Run: but commit -c {stack_name}
@@ -584,11 +587,12 @@ Chorus API
 Dashboard (real-time via SSE)
 ```
 
-Chorus provides a **second layer of control** via its own hooks for:
-- Task-to-session mapping
-- Permission request handling
+Chorus provides centralized orchestration via JSON monitoring for:
+- Task-to-session mapping via `json_session_id`
+- Deterministic event detection from structured JSON
 - Real-time status updates to dashboard
 - Task lifecycle management (start/complete/fail)
+- Session resumption with `--resume`
 
 ### tmux Commands
 
@@ -870,15 +874,7 @@ See: [GitHub Issue #8938](https://github.com/anthropics/claude-code/issues/8938)
 
 **Credential Refresh:**
 
-Credentials are refreshed from `~/.claude.json` every time `ensure_hooks()` is called (when starting tasks). This ensures spawned sessions pick up any authentication changes (e.g., after re-login).
-
-```python
-# services/hooks.py - ensure_hooks_config()
-# Always refresh credentials, even if config already exists
-global_creds = Path.home() / ".claude.json"
-if global_creds.exists():
-    shutil.copy2(global_creds, config_dir / ".claude.json")
-```
+Credentials are inherited from the user's global `~/.claude.json` when starting tasks. The `CLAUDE_CODE_OAUTH_TOKEN` environment variable ensures spawned sessions authenticate properly.
 
 ---
 
@@ -946,36 +942,38 @@ if global_creds.exists():
 
 ## Implementation Phases
 
-### Phase 1: Core Foundation
+### Phase 1: Core Foundation ✅
 - [x] Project structure
 - [x] config.py with settings
 - [x] SQLModel definitions
 - [x] Database setup
 - [x] tmux service wrapper
 
-### Phase 2: Task API + Hooks (Priority: tmux + hooks)
+### Phase 2: Task API + JSON Monitoring ✅
 - [x] `services/tmux.py` - Task-centric tmux operations
-- [ ] `services/hooks.py` - Hook config generation + handler script
-- [ ] `api/hooks.py` - Hook event endpoints (start/stop/permission/end)
-- [ ] `services/gitbutler.py` - GitButler MCP integration
-- [ ] `api/tasks.py` - Full task lifecycle endpoints
-- [ ] `api/events.py` - SSE endpoint for real-time updates
+- [x] `services/json_parser.py` - Parse stream-json output
+- [x] `services/monitor.py` - JSON event monitoring
+- [x] `services/gitbutler.py` - GitButler CLI integration
+- [x] `api/tasks.py` - Full task lifecycle endpoints
+- [x] `api/events.py` - SSE endpoint for real-time updates
 
-### Phase 3: Document API
-- [ ] `services/documents.py` - Document manager
-- [ ] `api/documents.py` - Document endpoints
-- [ ] Document reference endpoints
+### Phase 3: Dashboard ✅
+- [x] Task-centric dashboard layout
+- [x] htmx interactions for all actions
+- [x] SSE integration
+- [x] Dark theme styling
 
-### Phase 4: Dashboard
-- [ ] Task-centric dashboard layout
-- [ ] htmx interactions for all actions
-- [ ] SSE integration
+### Phase 4: Polish & Reliability ✅
+- [x] Error handling
+- [x] Edge cases (Claude crash, tmux death)
+- [x] Comprehensive logging system
+- [x] JSON monitoring migration
 
-### Phase 5: Polish
-- [ ] Error handling
-- [ ] Edge cases (Claude crash, tmux death)
+### Phase 5: Future Enhancements
+- [ ] Document API (`services/documents.py`, `api/documents.py`)
 - [ ] Desktop notifications
-- [ ] Manual testing
+- [ ] Integration tests with tmux
+- [ ] Web terminal UI improvements
 
 ---
 
