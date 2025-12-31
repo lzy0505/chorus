@@ -151,14 +151,17 @@ class JsonMonitor:
 
             case "text":
                 content = event.data.get("text", "")
-                # Show more text, split into lines if needed
+                # Only show non-empty, substantial text
+                content = content.strip()
+                if not content or len(content) < 10:
+                    return None  # Skip very short or empty text
                 if len(content) > 200:
                     content = content[:200] + "..."
                 return f"[{timestamp}] 💬 {content}"
 
-            case "assistant":
-                # Assistant thinking/response
-                return f"[{timestamp}] 🤖 Claude responding..."
+            case "assistant" | "user":
+                # Skip these - too noisy, not useful
+                return None
 
             case "result":
                 # Show stop reason if available
@@ -175,13 +178,13 @@ class JsonMonitor:
                 error_msg = event.data.get("error", {}).get("message", "Unknown error")
                 return f"[{timestamp}] ❌ Error: {error_msg}"
 
-            case "user":
-                # User input/feedback
-                return f"[{timestamp}] 👤 User response received"
+            case "system":
+                # Skip system events - internal only
+                return None
 
             case _:
-                # Log unknown events for debugging
-                return f"[{timestamp}] 📝 {event_type}"
+                # Skip unknown events to reduce noise
+                return None
 
     async def _monitor_task(self, task_id: UUID):
         """Monitor a specific task for JSON events.
