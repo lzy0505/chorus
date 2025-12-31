@@ -220,12 +220,23 @@ class JsonMonitor:
                     if session_id:
                         task.claude_session_id = session_id
                         task.claude_status = ClaudeStatus.idle
+                        # If task was waiting, set back to running
+                        from models import TaskStatus
+                        if task.status == TaskStatus.waiting:
+                            task.status = TaskStatus.running
+                            task.permission_prompt = None
                         logger.info(f"Task {task_id}: Claude session started, ID={session_id}")
                         self.db.commit()
 
                 case "tool_use":
                     # Claude is using a tool
                     task.claude_status = ClaudeStatus.busy
+                    # If task was waiting, set back to running
+                    from models import TaskStatus
+                    if task.status == TaskStatus.waiting:
+                        task.status = TaskStatus.running
+                        task.permission_prompt = None
+
                     tool_name = event.data.get("toolName", "unknown")
                     tool_input = event.data.get("toolInput", {})
                     file_path = tool_input.get("file_path")
@@ -325,12 +336,22 @@ class JsonMonitor:
                     # Claude is responding, mark as busy
                     if task.claude_status != ClaudeStatus.busy:
                         task.claude_status = ClaudeStatus.busy
-                        self.db.commit()
+                    # If task was waiting, set back to running
+                    from models import TaskStatus
+                    if task.status == TaskStatus.waiting:
+                        task.status = TaskStatus.running
+                        task.permission_prompt = None
+                    self.db.commit()
 
                 case "permission_request":
-                    # Claude is asking for permission
+                    # Claude is asking for permission - update both statuses
+                    from models import TaskStatus
+                    task.status = TaskStatus.waiting
                     task.claude_status = ClaudeStatus.waiting
-                    logger.info(f"Task {task_id}: Permission request")
+                    # Extract permission prompt if available
+                    prompt = event.data.get("prompt", "Permission requested")
+                    task.permission_prompt = prompt
+                    logger.info(f"Task {task_id}: Permission request - {prompt}")
                     self.db.commit()
 
                 case _:
