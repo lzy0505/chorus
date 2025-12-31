@@ -249,12 +249,12 @@ class TmuxService:
         else:
             claude_cmd = f"{env_prefix} claude"
 
-        # If there's an initial prompt, pass it directly to Claude as an argument
+        # If there's an initial prompt, pass it using -p flag
         # This is more reliable than waiting and sending keys via tmux
         if initial_prompt:
             # Escape the prompt for shell
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            claude_cmd += f' "{escaped_prompt}"'
+            claude_cmd += f' -p "{escaped_prompt}"'
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
@@ -308,10 +308,10 @@ class TmuxService:
             claude_cmd += f" --resume {resume_session_id}"
             logger.debug(f"Resuming Claude session: {resume_session_id}")
 
-        # If there's an initial prompt, pass it directly to Claude as an argument
+        # If there's an initial prompt, pass it using -p flag
         if initial_prompt:
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            claude_cmd += f' "{escaped_prompt}"'
+            claude_cmd += f' -p "{escaped_prompt}"'
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
