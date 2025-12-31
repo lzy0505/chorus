@@ -157,6 +157,13 @@ class JsonMonitor:
 
         while self._running:
             try:
+                # Check if task still exists in database
+                statement = select(Task).where(Task.id == task_id)
+                task = self.db.exec(statement).first()
+                if not task:
+                    logger.info(f"Task {task_id} no longer exists, stopping monitoring")
+                    break
+
                 # Capture JSON events from tmux
                 output = self.tmux.capture_json_events(task_id)
 
@@ -181,6 +188,10 @@ class JsonMonitor:
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Error monitoring task {task_id}: {e}", exc_info=True)
+                # Check if it's a session error - if so, stop monitoring this task
+                if "not found" in str(e).lower():
+                    logger.info(f"Session for task {task_id} not found, stopping monitoring")
+                    break
                 await asyncio.sleep(self.poll_interval)
 
     async def _handle_event(self, task_id: UUID, event: ClaudeJsonEvent):
