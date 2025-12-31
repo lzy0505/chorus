@@ -207,11 +207,13 @@ class JsonMonitor:
 
             # Format event as log entry and append to last_output
             log_entry = self._format_event_log(event)
+            log_updated = False
             if log_entry:
                 current_output = task.last_output or ""
                 # Keep last ~2000 chars
                 new_output = (current_output + "\n" + log_entry)[-2000:]
                 task.last_output = new_output
+                log_updated = True
 
             match event_type:
                 case "session_start":
@@ -357,6 +359,10 @@ class JsonMonitor:
                 case _:
                     # Unknown event type, log for debugging
                     logger.debug(f"Task {task_id}: Unknown event type '{event_type}'")
+
+            # Ensure log updates are committed even if event type didn't commit
+            if log_updated:
+                self.db.commit()
 
         except Exception as e:
             logger.error(f"Error handling event for task {task_id}: {e}", exc_info=True)
