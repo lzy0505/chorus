@@ -129,17 +129,17 @@
 
 <!-- Terminal (for running tasks) - outside refresh zone -->
 {% if task.status.value in ['running', 'waiting'] %}
-    {% if tmux_session_exists %}
+    {% if tmux_session_exists and task.ttyd_port %}
     <div class="terminal-section">
         <div class="terminal-header">
             <span>Terminal</span>
-            <a href="http://localhost:{{ 7681 + task.id }}" target="_blank" class="btn btn-small">
+            <a href="http://localhost:{{ task.ttyd_port }}" target="_blank" class="btn btn-small">
                 Open in New Tab
             </a>
         </div>
         <iframe
             id="terminal-iframe-{{ task.id }}"
-            src="http://localhost:{{ 7681 + task.id }}"
+            src="http://localhost:{{ task.ttyd_port }}"
             class="terminal-iframe"
             title="Task Terminal">
         </iframe>

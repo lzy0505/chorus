@@ -273,7 +273,8 @@ async def start_task(
 
     # 3. Start ttyd for web terminal access
     try:
-        ttyd.start(task_id, session_id)
+        ttyd_info = ttyd.start(task_id, session_id)
+        task.ttyd_port = ttyd_info.port
     except Exception:
         pass  # ttyd is optional, don't fail task start if it fails
 

@@ -9,6 +9,7 @@ import signal
 import os
 from dataclasses import dataclass
 from typing import Optional
+from uuid import UUID
 
 from config import get_config
 from services.logging_utils import get_logger, log_subprocess_call
@@ -41,19 +42,21 @@ class TtydConfig:
 @dataclass
 class TtydInfo:
     """Information about a running ttyd instance."""
-    task_id: int
+    task_id: UUID
     port: int
     pid: int
     url: str
 
 
 # Track running ttyd processes: task_id -> (pid, port)
-_running_processes: dict[int, tuple[int, int]] = {}
+_running_processes: dict[UUID, tuple[int, int]] = {}
 
 
-def _get_port_for_task(task_id: int, base_port: int = 7681) -> int:
-    """Calculate port for a task. Uses task_id + base_port."""
-    return base_port + task_id
+def _get_port_for_task(task_id: UUID, base_port: int = 7681) -> int:
+    """Calculate port for a task using hash of UUID."""
+    # Use hash of UUID to generate port in range [base_port, base_port + 10000)
+    port_offset = hash(task_id) % 10000
+    return base_port + port_offset
 
 
 def _is_process_running(pid: int) -> bool:
@@ -76,20 +79,20 @@ class TtydService:
         """Initialize the ttyd service.
 
         Args:
-            base_port: Base port for ttyd instances. Task ports are base_port + task_id.
+            base_port: Base port for ttyd instances. Task ports are calculated from UUID hash.
         """
         self.base_port = base_port
 
-    def get_port(self, task_id: int) -> int:
+    def get_port(self, task_id: UUID) -> int:
         """Get the port for a task's ttyd instance."""
         return _get_port_for_task(task_id, self.base_port)
 
-    def get_url(self, task_id: int) -> str:
+    def get_url(self, task_id: UUID) -> str:
         """Get the URL for a task's ttyd instance."""
         port = self.get_port(task_id)
         return f"http://localhost:{port}"
 
-    def is_running(self, task_id: int) -> bool:
+    def is_running(self, task_id: UUID) -> bool:
         """Check if ttyd is running for a task."""
         if task_id not in _running_processes:
             return False
@@ -100,7 +103,7 @@ class TtydService:
             return False
         return True
 
-    def start(self, task_id: int, session_id: str) -> TtydInfo:
+    def start(self, task_id: UUID, session_id: str) -> TtydInfo:
         """Start ttyd for a task's tmux session.
 
         Args:
@@ -163,7 +166,7 @@ class TtydService:
             logger.error(f"Failed to start ttyd for task {task_id}: {e}", exc_info=e)
             raise TtydError(f"Failed to start ttyd: {e}")
 
-    def stop(self, task_id: int) -> None:
+    def stop(self, task_id: UUID) -> None:
         """Stop ttyd for a task.
 
         Args:
@@ -190,7 +193,7 @@ class TtydService:
         del _running_processes[task_id]
         logger.info(f"Stopped ttyd for task {task_id}")
 
-    def stop_if_running(self, task_id: int) -> bool:
+    def stop_if_running(self, task_id: UUID) -> bool:
         """Stop ttyd if it's running for a task.
 
         Args:
@@ -208,7 +211,7 @@ class TtydService:
         except TtydNotRunningError:
             return False
 
-    def get_info(self, task_id: int) -> Optional[TtydInfo]:
+    def get_info(self, task_id: UUID) -> Optional[TtydInfo]:
         """Get info about a running ttyd instance.
 
         Args:

@@ -56,6 +56,7 @@ class Task(SQLModel, table=True):
 
     # tmux process
     tmux_session: Optional[str] = Field(default=None)  # e.g., "task-{uuid}"
+    ttyd_port: Optional[int] = Field(default=None)  # Web terminal port (assigned when task starts)
 
     # Claude session state (ephemeral, can be restarted)
     # Note: task.id (UUID) is used for GitButler hooks (persistent)
