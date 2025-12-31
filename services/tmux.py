@@ -286,22 +286,22 @@ class TmuxService:
 
         logger.info(f"Starting Claude Code (JSON mode) for task {task_id} in session {session_id}")
 
-        # Get shared config directory for hooks
-        config_dir = get_hooks_config_dir()
-
-        # Build the claude command with isolated config
-        env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+        # JSON mode: Don't use hooks config directory - hooks interfere with JSON output!
+        # Just use default Claude config or environment variables
+        env_vars = []
         oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if oauth_token:
             env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
-        env_prefix = " ".join(env_vars)
+        env_prefix = " ".join(env_vars) if env_vars else ""
 
         # Build Claude command with JSON output format
         if context_file and context_file.exists():
-            claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})" --output-format stream-json'
+            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json'.format(context_file=context_file)
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            claude_cmd = f"{env_prefix} claude --output-format stream-json"
+            base_cmd = "claude --output-format stream-json"
+
+        claude_cmd = f"{env_prefix} {base_cmd}".strip() if env_prefix else base_cmd
 
         # Add resume flag if session ID provided
         if resume_session_id:
