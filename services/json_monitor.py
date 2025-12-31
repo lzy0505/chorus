@@ -205,6 +205,14 @@ class JsonMonitor:
             event_type = event.event_type
             logger.debug(f"Task {task_id}: Handling event type '{event_type}'")
 
+            # Format event as log entry and append to last_output
+            log_entry = self._format_event_log(event)
+            if log_entry:
+                current_output = task.last_output or ""
+                # Keep last ~2000 chars
+                new_output = (current_output + "\n" + log_entry)[-2000:]
+                task.last_output = new_output
+
             match event_type:
                 case "session_start":
                     # Extract Claude session ID for --resume support (not for hooks!)

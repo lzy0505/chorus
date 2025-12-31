@@ -277,6 +277,11 @@ async def start_task(
     task.claude_status = ClaudeStatus.starting
     task.started_at = datetime.now(timezone.utc)
 
+    # Add initial user prompt to log
+    kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
+    timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    task.last_output = f"[{timestamp}] 👤 You: {kickoff_message}"
+
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -285,8 +290,6 @@ async def start_task(
     context_file = write_task_context(task, user_prompt=request.initial_prompt)
 
     # 6. Start Claude in tmux with context injected via --append-system-prompt
-    # Pass initial_prompt to send as a message (or default kickoff if None)
-    kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
 
     # Use JSON mode if enabled in config
     from config import get_config
