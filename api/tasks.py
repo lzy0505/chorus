@@ -294,6 +294,7 @@ async def start_task(
     # Use JSON mode if enabled in config
     from config import get_config
     config = get_config()
+    logger.info(f"Task {task_id}: use_json_mode={config.monitoring.use_json_mode}")
     if config.monitoring.use_json_mode:
         tmux.start_claude_json_mode(
             task_id,
