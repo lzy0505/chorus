@@ -431,3 +431,159 @@ class GitButlerService:
             return status.stacks
         except GitButlerError:
             return []
+
+    def call_pre_tool_hook(
+        self, session_id: str, file_path: str, transcript_path: str, tool_name: str = "Edit"
+    ) -> bool:
+        """Call GitButler pre-tool hook before a file edit.
+
+        Args:
+            session_id: Task UUID (used as Claude session ID and GitButler session identifier)
+            file_path: Absolute path to the file being edited
+            transcript_path: Path to the transcript file for this session
+            tool_name: Tool name (Edit, Write, or MultiEdit)
+
+        Returns:
+            True if hook succeeded, False otherwise
+        """
+        import json as json_lib
+
+        hook_input = {
+            "session_id": session_id,
+            "transcript_path": transcript_path,
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": {"file_path": file_path},
+        }
+
+        logger.debug(f"Calling pre-tool hook for session {session_id}, file {file_path}")
+        result = subprocess.run(
+            ["but", "claude", "pre-tool", "-j"],
+            input=json_lib.dumps(hook_input),
+            capture_output=True,
+            text=True,
+            cwd=self.project_root,
+        )
+
+        if result.returncode == 0:
+            logger.debug(f"Pre-tool hook succeeded for {file_path}")
+            return True
+        else:
+            logger.warning(f"Pre-tool hook failed: {result.stderr}")
+            return False
+
+    def call_post_tool_hook(
+        self, session_id: str, file_path: str, transcript_path: str, tool_name: str = "Edit"
+    ) -> bool:
+        """Call GitButler post-tool hook after a file edit.
+
+        This triggers GitButler to auto-create a stack for this session (on first edit)
+        and assign the edited file to that stack.
+
+        Args:
+            session_id: Task UUID (used as Claude session ID and GitButler session identifier)
+            file_path: Absolute path to the file that was edited
+            transcript_path: Path to the transcript file for this session
+            tool_name: Tool name (Edit, Write, or MultiEdit)
+
+        Returns:
+            True if hook succeeded, False otherwise
+        """
+        import json as json_lib
+
+        hook_input = {
+            "session_id": session_id,
+            "transcript_path": transcript_path,
+            "hook_event_name": "PostToolUse",
+            "tool_name": tool_name,
+            "tool_input": {"file_path": file_path},
+            "tool_response": {
+                "filePath": file_path,
+                "structuredPatch": [],  # Empty array works for our purposes
+            },
+        }
+
+        logger.debug(f"Calling post-tool hook for session {session_id}, file {file_path}")
+        result = subprocess.run(
+            ["but", "claude", "post-tool", "-j"],
+            input=json_lib.dumps(hook_input),
+            capture_output=True,
+            text=True,
+            cwd=self.project_root,
+        )
+
+        if result.returncode == 0:
+            logger.debug(f"Post-tool hook succeeded for {file_path}")
+            return True
+        else:
+            logger.warning(f"Post-tool hook failed: {result.stderr}")
+            return False
+
+    def call_stop_hook(self, session_id: str, transcript_path: str) -> bool:
+        """Call GitButler stop hook when a task completes.
+
+        Args:
+            session_id: Task UUID
+            transcript_path: Path to the transcript file for this session
+
+        Returns:
+            True if hook succeeded, False otherwise
+        """
+        import json as json_lib
+
+        hook_input = {
+            "session_id": session_id,
+            "transcript_path": transcript_path,
+            "hook_event_name": "SessionEnd",
+        }
+
+        logger.debug(f"Calling stop hook for session {session_id}")
+        result = subprocess.run(
+            ["but", "claude", "stop", "-j"],
+            input=json_lib.dumps(hook_input),
+            capture_output=True,
+            text=True,
+            cwd=self.project_root,
+        )
+
+        if result.returncode == 0:
+            logger.debug(f"Stop hook succeeded for session {session_id}")
+            return True
+        else:
+            logger.warning(f"Stop hook failed: {result.stderr}")
+            return False
+
+    def discover_stack_for_session(self, session_id: str, edited_file: str) -> Optional[tuple[str, str]]:
+        """Discover which stack was auto-created for a session by GitButler hooks.
+
+        After calling post-tool hook for the first time, GitButler creates an auto-stack
+        for the session. This method finds that stack by looking for the newest stack
+        containing the edited file.
+
+        Args:
+            session_id: Task UUID
+            edited_file: Path to the file that was just edited
+
+        Returns:
+            Tuple of (stack_name, stack_cli_id) if found, None otherwise
+        """
+        try:
+            status = self.get_status()
+
+            # Look for auto-created stacks (zl-branch-*) containing our file
+            for stack in status.stacks:
+                if stack.name.startswith("zl-branch-"):
+                    # Check if this stack has our file
+                    for change in stack.changes:
+                        if change.file_path == edited_file:
+                            logger.info(
+                                f"Discovered stack for session {session_id}: "
+                                f"{stack.name} (CLI ID: {stack.cli_id})"
+                            )
+                            return (stack.name, stack.cli_id)
+
+            logger.warning(f"Could not discover stack for session {session_id}")
+            return None
+        except GitButlerError as e:
+            logger.error(f"Error discovering stack: {e}")
+            return None

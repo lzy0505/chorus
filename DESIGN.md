@@ -108,15 +108,14 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | int (PK) | Auto-increment ID |
+| `id` | UUID (PK) | Task ID = Claude session ID = GitButler session identifier |
 | `title` | string | Short task title |
 | `description` | string | Detailed task description (markdown supported) |
 | `priority` | int | Higher = more important, default 0 |
 | `status` | enum | `pending`, `running`, `waiting`, `completed`, `failed` |
-| `stack_id` | string? | GitButler stack CLI ID, nullable until started |
+| `stack_name` | string? | GitButler auto-created stack name (e.g., "zl-branch-15"), discovered after first edit |
+| `stack_cli_id` | string? | GitButler stack CLI ID (e.g., "u0"), nullable until first file edit |
 | `tmux_session` | string? | tmux session ID, nullable until started |
-| `claude_session_id` | string? | Legacy field (deprecated, to be removed) |
-| `json_session_id` | string? | Claude Code session ID (from JSON events), used for `--resume` |
 | `claude_status` | enum | `stopped`, `starting`, `idle`, `busy`, `waiting` |
 | `claude_restarts` | int | Number of times Claude was restarted in this task |
 | `last_output` | string | Last ~2000 chars of terminal output |
@@ -124,8 +123,16 @@ The primary entity — a unit of work with its own tmux process and GitButler br
 | `created_at` | datetime | Task creation time |
 | `started_at` | datetime? | When tmux was spawned |
 | `completed_at` | datetime? | When task was completed |
-| `stack_name` | string? | GitButler stack name for reference |
 | `result` | string? | Completion notes or failure reason |
+
+**Key Design Decision: UUID as Primary Key**
+
+The task ID is a UUID that serves triple duty:
+1. **Task identifier** in Chorus database
+2. **Claude session_id** for `--resume` support
+3. **GitButler session identifier** for hooks (ensures each task gets its own auto-created stack)
+
+This eliminates the need for mapping between different identifiers and ensures perfect isolation between concurrent tasks.
 
 **Status Definitions:**
 - `pending`: Task created, not yet started (no tmux, no stack)
@@ -236,15 +243,23 @@ A reference to specific lines in a document, linked to a task.
    - Optionally adds document references for context
 
 2. **Start Task** (`pending` → `running`)
-   - Create GitButler stack: `but branch new {stack-name}`
-   - Spawn tmux session: `tmux new-session -d -s task-{id} -c {project_root}`
-   - Start ttyd for web terminal: `ttyd -W -p {7681+id} tmux attach -t task-{id}`
-   - Write task context to `/tmp/chorus/task-{id}/context.md`
+   - Generate UUID for task (used as task ID, Claude session ID, and GitButler session identifier)
+   - Create transcript file: `/tmp/chorus/task-{uuid}/transcript.json` with `{"type":"user","cwd":"{project_root}"}`
+   - Spawn tmux session: `tmux new-session -d -s task-{uuid} -c {project_root}`
+   - Start ttyd for web terminal: `ttyd -W -p {7681+port} tmux attach -t task-{uuid}`
+   - Write task context to `/tmp/chorus/task-{uuid}/context.md`
    - Start Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
+   - Note: GitButler stack is NOT pre-created; it's auto-created by hooks after first file edit
 
 3. **Monitor Task** (`running` ↔ `waiting`)
-   - Poll tmux output every 1 second
-   - Detect Claude status (idle/busy/waiting)
+   - Poll tmux output every 1 second for JSON events
+   - Parse events to detect Claude status (idle/busy/waiting)
+   - On **tool_use** event for Edit/Write/MultiEdit:
+     - Call `but claude pre-tool` with task UUID and file path
+   - On **tool_result** event (success) for Edit/Write/MultiEdit:
+     - Call `but claude post-tool` with task UUID and file path
+     - If this is the first edit, discover and save the auto-created stack name/CLI ID
+     - Commit to the stack: `but commit {stack-name}`
    - On permission prompt: update status, send desktop notification
    - User can approve/deny from dashboard
 
@@ -256,10 +271,11 @@ A reference to specific lines in a document, linked to a task.
 
 5. **Complete Task** (`running` → `completed`)
    - User triggers completion from dashboard
-   - GitButler auto-commits via its native hooks (`but claude post-tool/stop`)
-   - Alternatively, manual commit: `but commit -m "message" {stack}`
+   - Call `but claude stop` with task UUID to finalize GitButler session
+   - Final commit if needed: `but commit {stack-name}`
    - Stop ttyd (release port)
    - Kill tmux session
+   - Auto-created stack (e.g., "zl-branch-15") remains in GitButler for review/merge
    - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Update task status to `completed`
 
@@ -510,40 +526,96 @@ class Monitor:
 
 ### GitButler Integration
 
-GitButler uses **virtual branches** called **stacks** that can run in parallel. Multiple tasks can have their own stacks simultaneously in the same workspace.
+GitButler provides **Claude Code hooks** that automatically create and manage stacks (virtual branches) per Claude session. Chorus leverages these hooks to achieve perfect task isolation without global state.
 
-**CLI (`but`):**
-```bash
-# Create a new stack for a task
-but branch new task-{id}-{slug}
+#### How GitButler Hooks Work
 
-# Mark stack for auto-assignment (all new changes go here)
-but mark task-{id}-{slug}
+When Claude edits files, Chorus calls GitButler hooks with the task's UUID as the session ID:
 
-# Remove mark (before marking another stack)
-but unmark
+1. **Pre-tool hook** (`but claude pre-tool`): Called BEFORE file edit
+   - Tells GitButler "session X is about to edit a file"
+   - No stack created yet
 
-# List all stacks and their status
-but status -j
+2. **Post-tool hook** (`but claude post-tool`): Called AFTER file edit
+   - GitButler auto-creates a stack for this session (e.g., "zl-branch-15")
+   - Assigns the edited file to that stack
+   - Same session ID always uses the same stack
 
-# Show commits in a stack
-but branch show {stack} -j
+3. **Stop hook** (`but claude stop`): Called when task completes
+   - Finalizes session and allows cleanup
 
-# Manual commit to a specific stack (rarely needed - GitButler auto-commits)
-but commit -m "message" {stack}
+#### Hook JSON Format
 
-# Delete a stack (when task fails/cancelled)
-but branch delete {stack} --force
+**Pre-Tool:**
+```json
+{
+  "session_id": "task-uuid-here",
+  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit|Write|MultiEdit",
+  "tool_input": {
+    "file_path": "/absolute/path/to/file"
+  }
+}
 ```
 
-**Per-Task Stack Assignment (Concurrent Tasks):**
-Chorus manages commits centrally — no environment variables needed.
+**Post-Tool:**
+```json
+{
+  "session_id": "task-uuid-here",
+  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit|Write|MultiEdit",
+  "tool_input": {"file_path": "/absolute/path/to/file"},
+  "tool_response": {
+    "filePath": "/absolute/path/to/file",
+    "structuredPatch": []
+  }
+}
+```
+
+**Stop:**
+```json
+{
+  "session_id": "task-uuid-here",
+  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
+  "hook_event_name": "SessionEnd"
+}
+
+// Transcript file contains:
+{"type":"user","cwd":"/working/directory"}
+```
+
+#### Stack Discovery
+
+After the first file edit (post-tool hook), Chorus discovers the auto-created stack:
+
+```python
+# After calling post-tool hook
+status = gitbutler.get_status()
+
+# Find the newest stack with changes for files we just edited
+for stack in status.stacks:
+    if stack.name.startswith("zl-branch-"):
+        # Check if this stack has our file
+        if any(change.file_path == edited_file for change in stack.changes):
+            task.stack_name = stack.name
+            task.stack_cli_id = stack.cli_id
+            break
+```
+
+#### Benefits
+
+- ✅ **No marking needed** - No global state, perfect for concurrent tasks
+- ✅ **Automatic isolation** - Each task UUID → unique session → unique stack
+- ✅ **No reassignment** - Files go directly to the correct stack
+- ✅ **Clean 1:1 mapping** - Task ID = Session ID = Stack session identifier
 
 ```
 tmux-1 (task 1):                    tmux-2 (task 2):
 Claude edits files                  Claude edits files
-    ↓                                   ↓
-PostToolUse hook → notify Chorus    PostToolUse hook → notify Chorus
+    ↓ JSON event                        ↓ JSON event
+JSON Monitor detects tool_result    JSON Monitor detects tool_result
     ↓                                   ↓
 Chorus looks up task by session_id  Chorus looks up task by session_id
     ↓                                   ↓
