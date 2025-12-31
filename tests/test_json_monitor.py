@@ -165,7 +165,7 @@ async def test_handle_tool_result_no_commit_for_non_edit(db, monitor, mock_gitbu
     """Test tool_result for non-edit tools doesn't trigger commit."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
         stack_name="test-stack",
@@ -180,7 +180,7 @@ async def test_handle_tool_result_no_commit_for_non_edit(db, monitor, mock_gitbu
     )
 
     # Handle event
-    await monitor._handle_event(1, event)
+    await monitor._handle_event(TEST_TASK_ID, event)
 
     # Check GitButler commit was NOT called
     mock_gitbutler.commit_to_stack.assert_not_called()
@@ -191,7 +191,7 @@ async def test_handle_result_event(db, monitor):
     """Test handling result event."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
     )
@@ -219,7 +219,7 @@ async def test_handle_permission_request_event(db, monitor):
     """Test handling permission_request event."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
         claude_status=ClaudeStatus.busy,
@@ -234,7 +234,7 @@ async def test_handle_permission_request_event(db, monitor):
     )
 
     # Handle event
-    await monitor._handle_event(1, event)
+    await monitor._handle_event(TEST_TASK_ID, event)
 
     # Check status updated to waiting
     db.refresh(task)
@@ -246,7 +246,7 @@ async def test_handle_unknown_event(db, monitor):
     """Test handling unknown event type doesn't crash."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
     )
@@ -260,7 +260,7 @@ async def test_handle_unknown_event(db, monitor):
     )
 
     # Handle event - should not crash
-    await monitor._handle_event(1, event)
+    await monitor._handle_event(TEST_TASK_ID, event)
 
     # Task should be unchanged
     db.refresh(task)
@@ -272,7 +272,7 @@ async def test_monitor_parses_json_output(db, monitor, mock_tmux):
     """Test that monitor correctly parses JSON from tmux output."""
     # Create a task
     task = Task(
-        id=1,
+        id=TEST_TASK_ID,
         title="Test Task",
         status=TaskStatus.running,
     )
@@ -293,11 +293,11 @@ async def test_monitor_parses_json_output(db, monitor, mock_tmux):
 
     # Process each event
     for event in events:
-        await monitor._handle_event(1, event)
+        await monitor._handle_event(TEST_TASK_ID, event)
 
     # Check that events were processed
     db.refresh(task)
-    assert task.json_session_id == "test123"
+    assert task.claude_session_id == "test123"
     assert task.claude_status == ClaudeStatus.idle
 
 
