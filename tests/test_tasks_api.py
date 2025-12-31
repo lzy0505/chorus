@@ -497,13 +497,17 @@ class TestTaskRespond:
 class TestTaskComplete:
     """Tests for POST /api/tasks/{id}/complete endpoint."""
 
+    @patch("api.tasks.GitButlerService")
     @patch("api.tasks.TmuxService")
     def test_complete_task_success(
-        self, mock_tmux_class, client, engine
+        self, mock_tmux_class, mock_gitbutler_class, client, engine
     ):
-        """Test completing a running task."""
+        """Test completing a running task calls stop hook."""
         mock_tmux = MagicMock()
         mock_tmux_class.return_value = mock_tmux
+
+        mock_gitbutler = MagicMock()
+        mock_gitbutler_class.return_value = mock_gitbutler
 
         with Session(engine) as db:
             task = Task(
@@ -523,6 +527,10 @@ class TestTaskComplete:
 
         assert response.status_code == 200
 
+        # Verify stop hook was called
+        mock_gitbutler.call_stop_hook.assert_called_once()
+
+        # Verify tmux session was killed
         mock_tmux.kill_task_session.assert_called_once_with(task_id)
 
         with Session(engine) as db:

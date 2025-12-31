@@ -1,7 +1,9 @@
 """Tests for task-centric tmux service."""
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, call, mock_open
+from uuid import UUID, uuid4
+from pathlib import Path
 
 from services.tmux import (
     TmuxService,
@@ -12,23 +14,63 @@ from services.tmux import (
     session_exists,
     _session_id_for_task,
     _run_tmux,
+    get_transcript_dir,
+    create_transcript_file,
 )
+
+
+class TestTranscriptFunctions:
+    """Tests for transcript file management."""
+
+    def test_get_transcript_dir(self):
+        """Test getting transcript directory path."""
+        task_id = UUID("12345678-1234-5678-1234-567812345678")
+        expected = Path("/tmp/chorus/task-12345678-1234-5678-1234-567812345678")
+        assert get_transcript_dir(task_id) == expected
+
+    @patch("services.tmux.Path.mkdir")
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("services.tmux.datetime")
+    def test_create_transcript_file(self, mock_datetime, mock_file, mock_mkdir):
+        """Test creating transcript file with minimal entry."""
+        from datetime import datetime, timezone
+
+        task_id = UUID("12345678-1234-5678-1234-567812345678")
+        mock_now = datetime(2025, 12, 31, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = mock_now
+
+        result = create_transcript_file(task_id, "/test/project")
+
+        # Check directory creation
+        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+        # Check file was opened for writing
+        expected_path = Path("/tmp/chorus/task-12345678-1234-5678-1234-567812345678/transcript.json")
+        mock_file.assert_called_once_with(expected_path, "w")
+
+        # Check returned path
+        assert result == expected_path
+
+        # Check JSON was written
+        handle = mock_file()
+        written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+        assert '"sessionId": "12345678-1234-5678-1234-567812345678"' in written_data
+        assert '"cwd": "/test/project"' in written_data
 
 
 class TestSessionIdGeneration:
     """Tests for session ID generation."""
 
     def test_session_id_for_task(self):
-        """Test generating session ID from task ID."""
-        assert _session_id_for_task(1) == "claude-task-1"
-        assert _session_id_for_task(42) == "claude-task-42"
-        assert _session_id_for_task(999) == "claude-task-999"
+        """Test generating session ID from task UUID."""
+        task_id = UUID("12345678-1234-5678-1234-567812345678")
+        assert _session_id_for_task(task_id) == "claude-task-12345678-1234-5678-1234-567812345678"
 
     def test_get_session_id(self):
         """Test TmuxService.get_session_id method."""
         service = TmuxService()
-        assert service.get_session_id(1) == "claude-task-1"
-        assert service.get_session_id(123) == "claude-task-123"
+        task_id = UUID("12345678-1234-5678-1234-567812345678")
+        assert service.get_session_id(task_id) == "claude-task-12345678-1234-5678-1234-567812345678"
 
 
 class TestSessionExists:
