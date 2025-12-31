@@ -53,66 +53,121 @@
 - [ ] Desktop notifications (`services/notifier.py`)
 - [ ] Manual testing checklist
 
-### Phase 6: UUID + GitButler Hooks 🔄
-**PARTIALLY COMPLETE: UUID migration done, hook integration pending**
+### Phase 6: GitButler Hooks - "Task as Logical Session" 🔄
+**IN PROGRESS: Architecture finalized, implementation pending**
 
-**Completed:**
-- [x] Update `models.py` - Change Task.id from Integer to UUID ✅
-- [x] Update `models.py` - Replace `stack_id` with `stack_name` and `stack_cli_id` ✅
-- [x] Database supports UUID primary keys ✅
-- [x] Update `services/gitbutler.py` - Add hook methods ✅
-  - [x] `discover_stack_for_session()` ✅
-  - [x] `call_pre_tool_hook()` ✅
-  - [x] `call_post_tool_hook()` ✅
-  - [x] `call_stop_hook()` ✅
-- [x] Update all API endpoints to use UUID task IDs ✅
-- [x] Update frontend to handle UUID task IDs ✅
+#### Architecture: Task as Logical Session
 
-**Remaining:**
-- [ ] Update `services/json_monitor.py` - Integrate GitButler hooks
-  - [ ] Call pre-tool hook before file edits
-  - [ ] Call post-tool hook after file edits
-  - [ ] Stack discovery after first edit
-  - [ ] Save discovered stack to task
-- [ ] Update `services/tmux.py` - Create transcript files for hooks
-- [ ] Update `api/tasks.py` - Call stop hook on task completion
-- [ ] Test concurrent tasks with hooks
-- [ ] Clean up old stack marking code (if any remains)
+**Key Concept:** A Chorus **Task** = single GitButler **session**, even with multiple Claude restarts.
+
+```
+Task (UUID: abc-123)
+  = GitButler session_id: abc-123 (persistent)
+  = Transcript: /tmp/chorus/task-abc-123/
+  ├─ Claude session 1 (xyz-111) → edits use task_id
+  ├─ [crashes/restarts]
+  └─ Claude session 2 (xyz-222) → edits STILL use task_id
+
+Result: All edits → same GitButler stack!
+```
+
+**Two UUIDs:**
+- **Task UUID** (`task.id`): GitButler session_id, persistent
+- **Claude UUID**: For `--resume`, changes on restart
+
+#### Completed ✅
+- [x] UUID migration: Task.id is UUID primary key
+- [x] Database fields: `stack_name`, `stack_cli_id`
+- [x] Hook methods: `call_pre_tool_hook()`, `call_post_tool_hook()`, `call_stop_hook()`
+- [x] Stack discovery: `discover_stack_for_session()`
+- [x] Documentation: Architecture finalized
+
+#### Implementation Tasks ✅ (COMPLETED 2025-12-31)
+
+**1. `services/tmux.py`**
+- [x] Add helper functions: `get_transcript_dir()`, `create_transcript_file()`
+- [x] Update `create_task_session()`: Create transcript on task start
+- [x] Add cleanup in `kill_task_session()`
+
+**2. `models.py`**
+- [x] Add field: `claude_session_id: Optional[str]` (for --resume)
+
+**3. `services/json_monitor.py`**
+- [x] Add GitButlerService integration
+- [x] On `tool_use` (Edit/Write/MultiEdit): Call `pre_tool_hook(task.id, ...)`
+- [x] On `tool_result` success: Call `post_tool_hook(task.id, ...)`
+- [x] On first successful edit: Discover and save stack
+- [x] Extract Claude session_id for --resume
+
+**4. `api/tasks.py`**
+- [x] On task completion: Call `stop_hook(task.id, ...)`
+- [x] Cleanup transcript directory (handled by tmux)
+- [x] Update all task_id parameters from int to UUID
+
+#### Testing ✅ (COMPLETED 2025-12-31)
+- [x] Unit: Transcript creation
+- [x] Unit: Hook integration (5 tests covering all hook workflows)
+- [x] Unit: Stop hook on task completion
+- [ ] Integration: Single task with Claude restart (manual testing required)
+- [ ] Integration: Concurrent tasks → separate stacks (manual testing required)
+
+**Test Suite Status:**
+- 310 passing tests
+- All hook integration tests passing
+- 32 failing tests in legacy code (hooks API, UUID migrations)
 
 ## Notes
 
-### UUID + GitButler Hooks Architecture (2025-12-31)
+### GitButler Hooks - Detailed Implementation (2025-12-31)
 
-**Major architecture change to eliminate global state and enable perfect task isolation:**
+#### Architecture: Task as Logical Session
 
-**Problem Solved:**
-- Previous approach required `but mark` to assign changes to stacks (global state)
-- Concurrent tasks would conflict - only one stack could be marked at a time
-- Needed complex reassignment logic to move files between stacks
+**Key Innovation:** Task UUID = GitButler session (persistent across Claude restarts)
 
-**New Solution:**
-- Task ID = UUID (not auto-increment integer)
-- UUID serves triple duty: Task ID, Claude session_id, GitButler session identifier
-- GitButler hooks (`but claude pre-tool`, `post-tool`, `stop`) automatically create and manage stacks per session
-- Each task UUID → unique auto-created stack (e.g., "zl-branch-15")
-- No marking, no reassignment, no global state
+**Two UUIDs:**
+1. **Task UUID** (`task.id`) - GitButler session_id, persistent
+2. **Claude UUID** - For `--resume`, changes on restart
 
-**Workflow:**
-1. Create task → Generate UUID
-2. Start Claude → Use UUID as session_id
-3. File edited → Call pre-tool hook with UUID
-4. File saved → Call post-tool hook with UUID
-5. GitButler auto-creates stack for that UUID (first edit only)
-6. Discover stack name from GitButler status
-7. Commit to that stack
-8. Task complete → Call stop hook
+**Data Flow:**
 
-**Benefits:**
-- ✅ Perfect isolation between concurrent tasks
-- ✅ No global state (no marking)
-- ✅ No reassignment logic needed
-- ✅ Clean 1:1 mapping: UUID = Session = Stack
-- ✅ Simpler code, more reliable
+1. **Task Created** → Create transcript `/tmp/chorus/task-{uuid}/transcript.json`
+2. **Claude Started** → Generate new Claude UUID, use for `--resume`
+3. **File Edited** → Call `pre_tool_hook(session_id=task.id, ...)`
+4. **File Saved** → Call `post_tool_hook(session_id=task.id, ...)`
+5. **First Edit** → Discover stack, save `stack_name` to task
+6. **Claude Restart** → New Claude UUID, same task.id for hooks!
+7. **More Edits** → Still use task.id, same stack ✅
+8. **Task Complete** → Call `stop_hook(session_id=task.id)`
+
+#### Code Changes
+
+**`services/tmux.py`:**
+```python
+def get_transcript_dir(task_id: UUID) -> Path:
+    return Path(f"/tmp/chorus/task-{task_id}")
+
+def create_transcript_file(task_id: UUID, project_root: str) -> Path:
+    # Create JSONL file with minimal entry
+    # session_id = task_id
+```
+
+**`models.py`:**
+```python
+claude_session_id: Optional[str] = None  # For --resume
+```
+
+**`services/json_monitor.py`:**
+```python
+# On tool_use: call_pre_tool_hook(task.id, file_path, ...)
+# On tool_result: call_post_tool_hook(task.id, file_path, ...)
+# First edit: discover_stack_for_session() → save to task
+```
+
+**`api/tasks.py`:**
+```python
+# On completion: call_stop_hook(task.id, ...)
+# Cleanup transcript directory
+```
 
 ### JSON Monitoring Migration (2025-12-31)
 

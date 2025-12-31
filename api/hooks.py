@@ -6,6 +6,7 @@ Code fires events like SessionStart, Stop, PermissionRequest, and SessionEnd.
 """
 
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -49,7 +50,7 @@ class HookResponse(BaseModel):
     """Response for hook events."""
 
     status: str
-    task_id: Optional[int] = None
+    task_id: Optional[UUID] = None
     message: Optional[str] = None
 
 

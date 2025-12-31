@@ -58,7 +58,9 @@ class Task(SQLModel, table=True):
     tmux_session: Optional[str] = Field(default=None)  # e.g., "task-{uuid}"
 
     # Claude session state (ephemeral, can be restarted)
-    # Note: task.id (UUID) is used as Claude's session_id for --resume and GitButler hooks
+    # Note: task.id (UUID) is used for GitButler hooks (persistent)
+    # claude_session_id is used for Claude's --resume (changes on restart)
+    claude_session_id: Optional[str] = Field(default=None)  # For --resume, changes on Claude restart
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_restarts: int = Field(default=0)
     last_output: str = Field(default="")  # Last ~2000 chars of terminal output

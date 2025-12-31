@@ -539,24 +539,46 @@ class Monitor:
 
 ### GitButler Integration
 
-GitButler provides **CLI hooks** (`but claude pre-tool/post-tool/stop`) that automatically create and manage stacks (virtual branches) per Claude session. Chorus will leverage these hooks to achieve perfect task isolation without global state.
+GitButler provides **CLI hooks** (`but claude pre-tool/post-tool/stop`) that automatically create and manage stacks (virtual branches) per session. Chorus leverages these hooks to achieve perfect task isolation.
 
 **Note:** These are NOT Claude Code's SessionStart/ToolUse callbacks (which have been replaced by JSON monitoring). These are GitButler-specific CLI commands.
 
+#### Task as Logical Session
+
+**Key Concept:** A Chorus **Task** maps to a single GitButler **session**, even if multiple Claude Code sessions are spawned for that task.
+
+```
+Task (UUID: abc-123)
+  = GitButler session_id: abc-123 (persistent)
+  = Transcript: /tmp/chorus/task-abc-123/
+  = Tmux session: chorus-task-abc-123
+  ├─ Claude session 1 (initial, session_id: xyz-111)
+  │   └─ Edits → hooks use task_id (abc-123)
+  ├─ [Claude crashes/restarts]
+  └─ Claude session 2 (resumed, session_id: xyz-222)
+      └─ Edits → hooks STILL use task_id (abc-123)
+
+Result: All edits assigned to the same GitButler stack!
+```
+
+**Two Different UUIDs:**
+- **Task UUID** (`task.id`): Used as `session_id` in GitButler hooks. Persistent across Claude restarts.
+- **Claude Session UUID**: Used for Claude Code's `--resume` flag. Changes on each restart.
+
 #### How GitButler Hooks Work
 
-When Claude edits files, Chorus calls GitButler hooks with the task's UUID as the session ID:
+When files are edited, Chorus calls GitButler hooks with the **task's UUID** (not Claude's session ID):
 
 1. **Pre-tool hook** (`but claude pre-tool`): Called BEFORE file edit
-   - Tells GitButler "session X is about to edit a file"
-   - No stack created yet
+   - Tells GitButler "session {task-uuid} is about to edit a file"
+   - Establishes session-to-stack mapping
 
 2. **Post-tool hook** (`but claude post-tool`): Called AFTER file edit
    - GitButler auto-creates a stack for this session (e.g., "zl-branch-15")
    - Assigns the edited file to that stack
-   - Same session ID always uses the same stack
+   - Same task UUID always uses the same stack (even across Claude restarts!)
 
-3. **Stop hook** (`but claude stop`): Called when task completes
+3. **Stop hook** (`but claude stop`): Called when **task completes** (not when Claude restarts)
    - Finalizes session and allows cleanup
 
 #### Hook JSON Format
