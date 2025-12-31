@@ -89,6 +89,61 @@ class JsonMonitor:
             task.cancel()
         logger.info("JSON monitor stopped")
 
+    def _format_event_log(self, event: ClaudeJsonEvent) -> Optional[str]:
+        """Format a JSON event as a human-readable log entry.
+
+        Args:
+            event: The parsed JSON event
+
+        Returns:
+            Formatted log string or None if event should be skipped
+        """
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        event_type = event.event_type
+
+        match event_type:
+            case "session_start":
+                return f"[{timestamp}] Session started"
+
+            case "tool_use":
+                tool_name = event.data.get("toolName", "unknown")
+                tool_input = event.data.get("toolInput", {})
+                file_path = tool_input.get("file_path", "")
+                if file_path:
+                    return f"[{timestamp}] 🔧 {tool_name}: {file_path}"
+                else:
+                    return f"[{timestamp}] 🔧 {tool_name}"
+
+            case "tool_result":
+                is_error = event.data.get("isError", False)
+                if is_error:
+                    return f"[{timestamp}] ❌ Tool failed"
+                else:
+                    return f"[{timestamp}] ✅ Tool completed"
+
+            case "text":
+                content = event.data.get("text", "")
+                # Truncate long text
+                if len(content) > 100:
+                    content = content[:100] + "..."
+                return f"[{timestamp}] 💬 {content}"
+
+            case "result":
+                return f"[{timestamp}] ✓ Response complete"
+
+            case "permission_request":
+                return f"[{timestamp}] ⚠️  Permission requested"
+
+            case "error":
+                error_msg = event.data.get("error", {}).get("message", "Unknown error")
+                return f"[{timestamp}] ❌ Error: {error_msg}"
+
+            case _:
+                # Skip unknown events
+                return None
+
     async def _monitor_task(self, task_id: UUID):
         """Monitor a specific task for JSON events.
 
