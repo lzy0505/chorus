@@ -295,11 +295,12 @@ class TmuxService:
         env_prefix = " ".join(env_vars) if env_vars else ""
 
         # Build Claude command with JSON output format
+        # Note: --verbose is required when using -p with --output-format stream-json
         if context_file and context_file.exists():
-            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json'.format(context_file=context_file)
+            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            base_cmd = "claude --output-format stream-json"
+            base_cmd = "claude --output-format stream-json --verbose"
 
         claude_cmd = f"{env_prefix} {base_cmd}".strip() if env_prefix else base_cmd
 
