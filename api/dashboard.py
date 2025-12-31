@@ -120,23 +120,19 @@ async def get_task_output(
     task_id: UUID,
     db: Session = Depends(get_db),
 ):
-    """Get terminal output as HTML."""
+    """Get JSON output as HTML."""
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
-        return HTMLResponse("<span class='muted'>No active session</span>")
+        return HTMLResponse("<div class='output-header'>Live Output (JSON Events)</div><div class='output-content'><pre class='muted'>No active session</pre></div>")
 
-    tmux = TmuxService()
-    try:
-        output = tmux.capture_output(task_id, lines=50)
-        # Escape HTML and preserve whitespace
-        import html
-        escaped = html.escape(output)
-        return HTMLResponse(f"<code>{escaped}</code>")
-    except SessionNotFoundError:
-        return HTMLResponse("<span class='muted'>Session not found</span>")
+    # Return last output from JSON monitor
+    output = task.last_output or "Waiting for output..."
+    import html
+    escaped = html.escape(output)
+    return HTMLResponse(f"<div class='output-header'>Live Output (JSON Events)</div><div class='output-content'><pre>{escaped}</pre></div>")
 
 
 @router.post("/tasks/{task_id}/send", response_class=HTMLResponse)

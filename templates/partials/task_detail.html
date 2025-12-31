@@ -127,40 +127,17 @@
 
 </div><!-- end task-info-refresh -->
 
-<!-- Terminal (for running tasks) - outside refresh zone -->
+<!-- Live Output (for running tasks) - auto-refreshing -->
 {% if task.status.value in ['running', 'waiting'] %}
-    {% if tmux_session_exists and task.ttyd_port %}
-    <div class="terminal-section">
-        <div class="terminal-header">
-            <span>Terminal</span>
-            <a href="http://localhost:{{ task.ttyd_port }}" target="_blank" class="btn btn-small">
-                Open in New Tab
-            </a>
-        </div>
-        <iframe
-            id="terminal-iframe-{{ task.id }}"
-            src="http://localhost:{{ task.ttyd_port }}"
-            class="terminal-iframe"
-            title="Task Terminal">
-        </iframe>
-
-        <!-- Send Message Form -->
-        <form class="send-form" hx-post="/dashboard/tasks/{{ task.id }}/send" hx-swap="none">
-            <input type="text"
-                   name="message"
-                   placeholder="Send a message to Claude (Ctrl/Cmd+Enter to send)"
-                   class="message-input"
-                   autocomplete="off">
-            <button type="submit" class="btn btn-primary">Send</button>
-        </form>
+<div class="output-section"
+     hx-get="/dashboard/tasks/{{ task.id }}/output"
+     hx-trigger="every 2s"
+     hx-swap="innerHTML">
+    <div class="output-header">Live Output (JSON Events)</div>
+    <div class="output-content">
+        <pre>{{ task.last_output or 'Waiting for output...' }}</pre>
     </div>
-    {% else %}
-    <div class="terminal-section">
-        <div class="terminal-error">
-            <strong>Error:</strong> tmux session not found. The terminal session should be alive throughout the task lifecycle.
-        </div>
-    </div>
-    {% endif %}
+</div>
 {% endif %}
 
 </div><!-- end task-detail-content -->

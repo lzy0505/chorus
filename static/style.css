@@ -331,20 +331,38 @@ h1 {
     flex: 1;
 }
 
-/* Terminal */
-.terminal-section {
+/* Output Section */
+.output-section {
     margin-top: 1rem;
     overflow: hidden;
     flex-shrink: 0;
 }
 
-.terminal-header {
+.output-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
     color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.output-content {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1rem;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.output-content pre {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
 .terminal {

@@ -20,7 +20,6 @@ from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError,
 from services.gitbutler import GitButlerService, StackExistsError, GitButlerError
 from services.hooks import HooksService
 from services.context import write_task_context, cleanup_task_context, get_context_file
-from services.ttyd import TtydService
 from services.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -248,7 +247,6 @@ async def start_task(
     gitbutler = GitButlerService()
     tmux = TmuxService()
     hooks = HooksService()
-    ttyd = TtydService()
 
     # 1. Create GitButler stack
     stack_name = generate_stack_name(task)
@@ -271,17 +269,10 @@ async def start_task(
         session_id = tmux.get_session_id(task_id)
         task.tmux_session = session_id
 
-    # 3. Start ttyd for web terminal access
-    try:
-        ttyd_info = ttyd.start(task_id, session_id)
-        task.ttyd_port = ttyd_info.port
-    except Exception:
-        pass  # ttyd is optional, don't fail task start if it fails
-
-    # 4. Ensure hooks config exists (shared across all sessions)
+    # 3. Ensure hooks config exists (shared across all sessions)
     hooks.ensure_hooks()
 
-    # 5. Update task status
+    # 4. Update task status
     task.status = TaskStatus.running
     task.claude_status = ClaudeStatus.starting
     task.started_at = datetime.now(timezone.utc)
@@ -290,10 +281,10 @@ async def start_task(
     db.commit()
     db.refresh(task)
 
-    # 6. Write task context to /tmp (not in project directory)
+    # 5. Write task context to /tmp (not in project directory)
     context_file = write_task_context(task, user_prompt=request.initial_prompt)
 
-    # 7. Start Claude in tmux with context injected via --append-system-prompt
+    # 6. Start Claude in tmux with context injected via --append-system-prompt
     # Pass initial_prompt to send as a message (or default kickoff if None)
     kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
 
@@ -532,11 +523,7 @@ async def complete_task(
         )
 
     tmux = TmuxService()
-    ttyd = TtydService()
     gitbutler = GitButlerService()
-
-    # Stop ttyd (release port)
-    ttyd.stop_if_running(task_id)
 
     # Call GitButler stop hook before cleanup
     transcript_dir = get_transcript_dir(task_id)
@@ -601,11 +588,7 @@ async def fail_task(
         )
 
     tmux = TmuxService()
-    ttyd = TtydService()
     gitbutler = GitButlerService()
-
-    # Stop ttyd (release port)
-    ttyd.stop_if_running(task_id)
 
     # Kill tmux session if it exists
     try:
