@@ -1,6 +1,7 @@
 """Tests for database models."""
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlmodel import Session
 
@@ -18,7 +19,7 @@ class TestTaskModel:
     """Tests for Task model."""
 
     def test_create_task(self, db: Session):
-        """Test creating a task."""
+        """Test creating a task with auto-generated UUID."""
         task = Task(
             title="Test Task",
             description="A test task description",
@@ -29,6 +30,7 @@ class TestTaskModel:
         db.refresh(task)
 
         assert task.id is not None
+        assert isinstance(task.id, UUID)
         assert task.title == "Test Task"
         assert task.description == "A test task description"
         assert task.status == TaskStatus.pending
@@ -57,10 +59,11 @@ class TestTaskModel:
         db.commit()
         db.refresh(task)
 
+        assert isinstance(task.id, UUID)
         assert task.description == ""
         assert task.priority == 0
         assert task.status == TaskStatus.pending
-        assert task.stack_id is None
+        assert task.stack_cli_id is None
         assert task.stack_name is None
         assert task.tmux_session is None
         assert task.claude_status == ClaudeStatus.stopped
@@ -88,12 +91,12 @@ class TestTaskModel:
         assert task.completed_at is None
 
     def test_task_with_tmux_and_stack(self, db: Session):
-        """Test task with tmux session and GitButler stack."""
+        """Test task with tmux session and GitButler auto-created stack."""
         task = Task(
             title="Feature Task",
-            stack_id="tm",
-            stack_name="task-1-auth",
-            tmux_session="task-1",
+            stack_cli_id="u0",
+            stack_name="zl-branch-15",
+            tmux_session="task-550e8400-e29b-41d4-a716-446655440000",
             status=TaskStatus.running,
             claude_status=ClaudeStatus.busy,
         )
@@ -101,9 +104,10 @@ class TestTaskModel:
         db.commit()
         db.refresh(task)
 
-        assert task.stack_id == "tm"
-        assert task.stack_name == "task-1-auth"
-        assert task.tmux_session == "task-1"
+        assert isinstance(task.id, UUID)
+        assert task.stack_cli_id == "u0"
+        assert task.stack_name == "zl-branch-15"
+        assert task.tmux_session == "task-550e8400-e29b-41d4-a716-446655440000"
         assert task.status == TaskStatus.running
         assert task.claude_status == ClaudeStatus.busy
 
@@ -265,7 +269,7 @@ class TestDocumentReferenceModel:
         assert ref.note == "Important section"
 
     def test_reference_with_task(self, db: Session):
-        """Test reference linked to a task."""
+        """Test reference linked to a task with UUID foreign key."""
         doc = Document(path="spec.md")
         task = Task(title="Implement feature")
         db.add(doc)
@@ -285,6 +289,7 @@ class TestDocumentReferenceModel:
         db.refresh(ref)
 
         assert ref.task_id == task.id
+        assert isinstance(ref.task_id, UUID)
 
     def test_reference_without_note(self, db: Session):
         """Test reference without optional note."""

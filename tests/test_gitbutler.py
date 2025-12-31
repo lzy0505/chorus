@@ -828,3 +828,245 @@ class TestGitButlerServiceGetStackByName:
         stack = service.get_stack_by_name("nonexistent")
 
         assert stack is None
+
+
+class TestGitButlerHooks:
+    """Tests for GitButler Claude Code hooks integration."""
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_pre_tool_hook_success(self, mock_run):
+        """Test calling pre-tool hook successfully."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "pre-tool", "-j"],
+            returncode=0,
+            stdout='{"continue":true,"stopReason":"","suppressOutput":true}',
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_pre_tool_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            file_path="/test/file.py",
+            transcript_path="/tmp/transcript.json",
+            tool_name="Edit",
+        )
+
+        assert result is True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args.kwargs["input"] is not None
+
+        # Verify hook input JSON structure
+        hook_input = json.loads(call_args.kwargs["input"])
+        assert hook_input["session_id"] == "550e8400-e29b-41d4-a716-446655440000"
+        assert hook_input["hook_event_name"] == "PreToolUse"
+        assert hook_input["tool_name"] == "Edit"
+        assert hook_input["tool_input"]["file_path"] == "/test/file.py"
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_pre_tool_hook_failure(self, mock_run):
+        """Test pre-tool hook failure handling."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "pre-tool", "-j"],
+            returncode=1,
+            stdout="",
+            stderr="Hook failed",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_pre_tool_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            file_path="/test/file.py",
+            transcript_path="/tmp/transcript.json",
+        )
+
+        assert result is False
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_post_tool_hook_success(self, mock_run):
+        """Test calling post-tool hook successfully."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "post-tool", "-j"],
+            returncode=0,
+            stdout='{"continue":true,"stopReason":"","suppressOutput":true}',
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_post_tool_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            file_path="/test/file.py",
+            transcript_path="/tmp/transcript.json",
+            tool_name="Write",
+        )
+
+        assert result is True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+
+        # Verify hook input JSON structure
+        hook_input = json.loads(call_args.kwargs["input"])
+        assert hook_input["session_id"] == "550e8400-e29b-41d4-a716-446655440000"
+        assert hook_input["hook_event_name"] == "PostToolUse"
+        assert hook_input["tool_name"] == "Write"
+        assert hook_input["tool_response"]["filePath"] == "/test/file.py"
+        assert hook_input["tool_response"]["structuredPatch"] == []
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_post_tool_hook_failure(self, mock_run):
+        """Test post-tool hook failure handling."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "post-tool", "-j"],
+            returncode=1,
+            stdout="",
+            stderr="Invalid JSON",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_post_tool_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            file_path="/test/file.py",
+            transcript_path="/tmp/transcript.json",
+        )
+
+        assert result is False
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_stop_hook_success(self, mock_run):
+        """Test calling stop hook successfully."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "stop", "-j"],
+            returncode=0,
+            stdout='{"continue":true,"stopReason":"","suppressOutput":true}',
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_stop_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            transcript_path="/tmp/transcript.json",
+        )
+
+        assert result is True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+
+        # Verify hook input JSON structure
+        hook_input = json.loads(call_args.kwargs["input"])
+        assert hook_input["session_id"] == "550e8400-e29b-41d4-a716-446655440000"
+        assert hook_input["hook_event_name"] == "SessionEnd"
+        assert hook_input["transcript_path"] == "/tmp/transcript.json"
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_call_stop_hook_failure(self, mock_run):
+        """Test stop hook failure handling."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "claude", "stop", "-j"],
+            returncode=1,
+            stdout="",
+            stderr="Transcript not found",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.call_stop_hook(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            transcript_path="/tmp/transcript.json",
+        )
+
+        assert result is False
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_discover_stack_for_session_success(self, mock_run):
+        """Test discovering auto-created stack after first edit."""
+        status_json = {
+            "stacks": [
+                {
+                    "cliId": "u0",
+                    "assignedChanges": [
+                        {"cliId": "c1", "filePath": "/test/file.py", "changeType": "modified"}
+                    ],
+                    "branches": [
+                        {
+                            "cliId": "u0",
+                            "name": "zl-branch-15",
+                            "commits": [],
+                        }
+                    ],
+                }
+            ],
+            "unassignedChanges": [],
+        }
+
+        mock_run.return_value = CompletedProcess(
+            args=["but", "status", "-j"],
+            returncode=0,
+            stdout=json.dumps(status_json),
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.discover_stack_for_session(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            edited_file="/test/file.py",
+        )
+
+        assert result is not None
+        stack_name, stack_cli_id = result
+        assert stack_name == "zl-branch-15"
+        assert stack_cli_id == "u0"
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_discover_stack_for_session_not_found(self, mock_run):
+        """Test when stack discovery fails."""
+        mock_run.return_value = CompletedProcess(
+            args=["but", "status", "-j"],
+            returncode=0,
+            stdout=json.dumps({"stacks": [], "unassignedChanges": []}),
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.discover_stack_for_session(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            edited_file="/test/file.py",
+        )
+
+        assert result is None
+
+    @patch("services.gitbutler.subprocess.run")
+    def test_discover_stack_ignores_non_auto_stacks(self, mock_run):
+        """Test that discovery only looks at auto-created zl-branch-* stacks."""
+        status_json = {
+            "stacks": [
+                {
+                    "cliId": "tm",
+                    "assignedChanges": [
+                        {"cliId": "c1", "filePath": "/test/file.py", "changeType": "modified"}
+                    ],
+                    "branches": [
+                        {
+                            "cliId": "tm",
+                            "name": "task-1-feature",  # Not a zl-branch-*
+                            "commits": [],
+                        }
+                    ],
+                }
+            ],
+            "unassignedChanges": [],
+        }
+
+        mock_run.return_value = CompletedProcess(
+            args=["but", "status", "-j"],
+            returncode=0,
+            stdout=json.dumps(status_json),
+            stderr="",
+        )
+
+        service = GitButlerService(project_root="/test")
+        result = service.discover_stack_for_session(
+            session_id="550e8400-e29b-41d4-a716-446655440000",
+            edited_file="/test/file.py",
+        )
+
+        # Should not find task-1-feature, only zl-branch-* stacks
+        assert result is None
