@@ -155,9 +155,7 @@ class JsonMonitor:
                 content = content.strip()
                 if not content:
                     return None  # Skip empty text
-                # Show first meaningful chunk
-                if len(content) > 300:
-                    content = content[:300] + "..."
+                # Don't truncate - let UI handle long content
                 return f"[{timestamp}] 💬 {content}"
 
             case "assistant":
