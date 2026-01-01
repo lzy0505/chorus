@@ -624,8 +624,12 @@ h1 {
     align-items: center;
 }
 
-.task-panel.collapsed .panel-header-content > * {
-    display: none;
+.task-panel.collapsed .panel-header-content > span {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 .task-panel.collapsed .panel-toggle {
@@ -639,69 +643,9 @@ h1 {
     justify-content: center;
 }
 
-.task-panel.collapsed .filter-tabs {
-    display: none;
-}
-
-/* Compact task list when collapsed */
+.task-panel.collapsed .filter-tabs,
 .task-panel.collapsed #task-list {
-    padding: 0.5rem 0.25rem;
-}
-
-.task-panel.collapsed #task-list > p,
-.task-panel.collapsed #task-list > .loading,
-.task-panel.collapsed #task-list > .muted {
-    display: none;
-}
-
-.task-panel.collapsed #task-list-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.task-panel.collapsed .task-item {
-    padding: 0;
-    margin: 0;
-    min-height: 6px;
-    height: 6px;
-    width: 100%;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    overflow: hidden;
-    border: none;
-}
-
-.task-panel.collapsed .task-item:hover {
-    height: 10px;
-    transform: scale(1.1);
-}
-
-.task-panel.collapsed .task-header,
-.task-panel.collapsed .task-meta {
     display: none !important;
-}
-
-/* Show only status color as indicator */
-.task-panel.collapsed .task-item {
-    background: var(--text-secondary);
-}
-
-.task-panel.collapsed .task-item.task-running {
-    background: var(--accent-blue);
-}
-
-.task-panel.collapsed .task-item.task-waiting {
-    background: var(--accent-yellow);
-}
-
-.task-panel.collapsed .task-item.task-completed {
-    background: var(--accent-green);
-}
-
-.task-panel.collapsed .task-item.task-failed {
-    background: var(--accent-red);
 }
 
 /* Detail panel takes full remaining space when task panel is collapsed */
