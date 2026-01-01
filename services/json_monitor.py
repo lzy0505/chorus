@@ -188,11 +188,8 @@ class JsonMonitor:
                 return None
 
             case "result":
-                # Show stop reason if available
-                stop_reason = event.data.get("stopReason", "")
-                if stop_reason:
-                    return f"[{timestamp}] ✓ Response complete ({stop_reason})"
-                return f"[{timestamp}] ✓ Response complete"
+                # Skip - not informative, we already show the actual content
+                return None
 
             case "permission_request":
                 prompt = event.data.get("prompt", "Permission requested")
