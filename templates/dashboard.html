@@ -11,12 +11,19 @@
         </form>
     </div>
 
+    <!-- Collapsed Sidebar (shown when task panel is collapsed) -->
+    <div class="collapsed-sidebar" id="collapsed-sidebar" style="display: none;">
+        <button class="expand-button" onclick="toggleTaskPanel()" title="Expand task list">
+            <span>▶</span>
+        </button>
+    </div>
+
     <!-- Task List -->
     <div class="panel task-panel" id="task-panel">
         <div class="panel-header">
             <div class="panel-header-content">
                 <span>Tasks</span>
-                <button class="panel-toggle" onclick="document.getElementById('task-panel').classList.toggle('collapsed'); document.querySelector('.dashboard').classList.toggle('collapsed-mode');" title="Toggle task list">
+                <button class="panel-toggle" onclick="toggleTaskPanel()" title="Toggle task list">
                     <span class="toggle-icon">◀</span>
                 </button>
             </div>
@@ -31,6 +38,26 @@
             <p class="loading">Loading tasks...</p>
         </div>
     </div>
+
+    <script>
+    function toggleTaskPanel() {
+        const panel = document.getElementById('task-panel');
+        const sidebar = document.getElementById('collapsed-sidebar');
+        const dashboard = document.querySelector('.dashboard');
+
+        if (panel.style.display === 'none') {
+            // Expand
+            panel.style.display = 'block';
+            sidebar.style.display = 'none';
+            dashboard.classList.remove('collapsed-mode');
+        } else {
+            // Collapse
+            panel.style.display = 'none';
+            sidebar.style.display = 'block';
+            dashboard.classList.add('collapsed-mode');
+        }
+    }
+    </script>
 
     <!-- Task Detail (shown when task selected) -->
     <div class="panel detail-panel" id="task-detail">
