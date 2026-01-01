@@ -18,6 +18,10 @@ from services.tmux import TmuxService, SessionNotFoundError
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 templates = Jinja2Templates(directory="templates")
 
+# Add custom Jinja filters
+import json
+templates.env.filters["from_json"] = lambda s: json.loads(s) if s else []
+
 
 def _render_task_with_oob(request: Request, task: Task) -> HTMLResponse:
     """Render task detail with out-of-band task list item update."""

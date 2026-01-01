@@ -275,33 +275,31 @@ task = Task(
 
 ## Recommendations for Chorus
 
-### 🎯 Recommended: Interactive Permission Handling
+### 🎯 Current Implementation: Pre-Approval with acceptEdits
 
-**Don't bypass permissions - handle them interactively!**
+**Chorus uses `--permission-mode acceptEdits` by default for `-p` mode compatibility.**
 
-See **[INTERACTIVE_PERMISSIONS.md](INTERACTIVE_PERMISSIONS.md)** for full details.
+**Why Pre-Approval:**
+- ✅ Compatible with `-p` flag (atomic execution)
+- ✅ Auto-approves file edits (Read, Write, Edit)
+- ⚠️ Still prompts for Bash commands (safety)
+- ✅ Good balance of automation and safety
 
-**Why Interactive is Better:**
-- ✅ See exactly what Claude wants to do
-- ✅ Approve/deny each operation
-- ✅ Better security and control
-- ✅ User stays informed
+**Current default:**
+```bash
+claude -p "prompt" \
+  --output-format stream-json \
+  --verbose \
+  --permission-mode acceptEdits
+```
 
-**How it works:**
-1. Don't use `--allowedTools` or `--permission-mode`
-2. Let Claude ask for permission normally
-3. JsonMonitor detects `permission_request` event
-4. UI shows permission dialog with Approve/Deny buttons
-5. User response sent to tmux via `send_confirmation()`
-6. Claude continues processing
-
-**Already implemented!** The infrastructure exists, just needs enhanced UI.
+**Note:** Interactive permissions (UI approve/deny) don't work with `-p` flag because Claude doesn't emit `permission_request` events in non-interactive mode. For orchestration and task atomicity, pre-approval is the practical choice.
 
 ---
 
-### Alternative: Pre-Approval (When Needed)
+### Future: Configurable Permission Modes
 
-For automated workflows where interaction isn't desired:
+For different use cases, we can support:
 
 1. **For safe file editing:**
    ```python

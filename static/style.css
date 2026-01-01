@@ -377,6 +377,66 @@ h1 {
     flex: 1;
 }
 
+.continue-task-form {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--accent-blue);
+    border-radius: 6px;
+}
+
+.continue-task-form .message-input {
+    flex: 1;
+}
+
+/* Prompt History */
+.prompt-history-section {
+    margin: 1rem 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.prompt-history-header {
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.prompt-history-content {
+    padding: 0.5rem;
+}
+
+.prompt-item {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-blue);
+}
+
+.prompt-number {
+    font-weight: 600;
+    color: var(--accent-blue);
+    font-size: 0.75rem;
+    min-width: 2rem;
+}
+
+.prompt-text {
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
 /* Output Section */
 .output-section {
     margin-top: 1rem;

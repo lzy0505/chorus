@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2025-12-31 14:43
+> Auto-updated by Claude Code. Last update: 2026-01-01 15:58
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -57,6 +57,17 @@
 - 🎯 All critical hook integration tests passing
 - ⏭️ Integration tests require manual testing with real Claude sessions
 
+## In Progress
+
+### Phase 8.3: Granular Status Tracking
+**Goal:** Show what Claude is actually doing from JSON events
+
+- [ ] Expand ClaudeStatus enum (thinking, reading, editing, running)
+- [ ] Implement `_update_status_from_event()` in json_monitor
+- [ ] Extract activity context from events
+- [ ] Update UI to show status + activity
+- [ ] Add status icons/colors
+
 ## Up Next
 
 ### Document Management (Phase 4)
@@ -64,12 +75,32 @@
 - [ ] Add document reference UI
 - [ ] Context injection for tasks
 
+### Phase 8.4: Error vs Normal Termination
+- [ ] Detect normal termination (result with stopReason: "end_turn")
+- [ ] Detect error termination (error events)
+- [ ] Detect user cancellation (no result event)
+- [ ] UI shows different actions based on termination type
+
 ### Polish & Reliability
 - [ ] Desktop notifications for permission requests
 - [ ] Comprehensive manual testing checklist
 - [ ] Error recovery scenarios
 
 ## Completed
+
+### Phase 8: Enhanced UX Features (2026-01-01)
+- ✅ **8.1: Permission Configuration**
+  - Default `--permission-mode acceptEdits` for `-p` compatibility
+  - Auto-approves file edits (Read, Write, Edit)
+  - Still prompts for Bash commands (safety)
+  - Documented in `docs/PERMISSION_HANDLING.md`
+- ✅ **8.2: Task Continuation UI**
+  - Added `continuation_count` and `prompt_history` fields to Task model
+  - Created `/api/tasks/{task_id}/continue` endpoint with `--resume` support
+  - UI shows "Continue Task" button when Claude stopped
+  - Prompt history displayed in numbered list
+  - Session ID shown in info grid
+  - Continuation count tracked and displayed
 
 ### Documentation Updates (2025-12-31)
 - ✅ Updated DESIGN.md with UUID-based architecture

@@ -65,6 +65,8 @@ class Task(SQLModel, table=True):
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_activity: Optional[str] = Field(default=None)  # Current activity description (e.g., "Editing main.py")
     claude_restarts: int = Field(default=0)
+    continuation_count: int = Field(default=0)  # How many times task was continued with new prompts
+    prompt_history: str = Field(default="")  # JSON array of prompts sent to Claude
     last_output: str = Field(default="")  # Last ~10000 chars of formatted log output
     permission_prompt: Optional[str] = Field(default=None)
 

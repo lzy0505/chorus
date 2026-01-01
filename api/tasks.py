@@ -54,7 +54,10 @@ class TaskResponse(BaseModel):
     stack_name: Optional[str]
     tmux_session: Optional[str]
     claude_status: ClaudeStatus
+    claude_session_id: Optional[str]
     claude_restarts: int
+    continuation_count: int
+    prompt_history: str
     permission_prompt: Optional[str]
     created_at: datetime
     started_at: Optional[datetime]
@@ -93,6 +96,12 @@ class TaskFailRequest(BaseModel):
 
     reason: Optional[str] = None
     delete_stack: bool = False
+
+
+class TaskContinueRequest(BaseModel):
+    """Request body for continuing a task with a new prompt."""
+
+    prompt: str
 
 
 class ActionResponse(BaseModel):
@@ -282,6 +291,11 @@ async def start_task(
     timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
     task.last_output = f"[{timestamp}] 👤 You: {kickoff_message}"
 
+    # Record initial prompt in history
+    import json
+    prompts = [kickoff_message]
+    task.prompt_history = json.dumps(prompts)
+
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -393,6 +407,96 @@ async def restart_claude(
     return ActionResponse(
         status="ok",
         message=f"Claude restarted for task {task_id} (restart #{task.claude_restarts})",
+        task_id=task_id,
+    )
+
+
+@router.post("/{task_id}/continue", response_model=ActionResponse)
+async def continue_task(
+    task_id: UUID,
+    request: TaskContinueRequest,
+    db: Session = Depends(get_db),
+) -> ActionResponse:
+    """Continue a task with a new prompt using --resume.
+
+    This is used for multi-step tasks where Claude has stopped after completing
+    one step. Uses the saved claude_session_id to resume the session.
+
+    The task must be running but Claude must be stopped.
+    """
+    import json
+
+    logger.info(f"Continuing task {task_id} with new prompt: {request.prompt[:50]}...")
+    task = get_task_or_404(db, task_id)
+
+    # Validate task state
+    if task.status != TaskStatus.running:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task is {task.status}, can only continue running tasks",
+        )
+
+    if task.claude_status != ClaudeStatus.stopped:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Claude is {task.claude_status}, can only continue when stopped",
+        )
+
+    if not task.claude_session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No session ID available. Use 'Restart Claude' instead.",
+        )
+
+    # Update prompt history
+    try:
+        prompts = json.loads(task.prompt_history) if task.prompt_history else []
+    except json.JSONDecodeError:
+        prompts = []
+
+    prompts.append(request.prompt)
+    task.prompt_history = json.dumps(prompts)
+    task.continuation_count += 1
+
+    # Update task state
+    task.claude_status = ClaudeStatus.starting
+    task.permission_prompt = None
+
+    db.add(task)
+    db.commit()
+
+    # Get context file and start Claude with resume
+    context_file = get_context_file(task_id)
+    tmux = TmuxService()
+
+    # Use JSON mode if enabled in config
+    from config import get_config
+    config = get_config()
+
+    try:
+        if config.monitoring.use_json_mode:
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=request.prompt,
+                context_file=context_file,
+                resume_session_id=task.claude_session_id
+            )
+        else:
+            # Legacy mode doesn't support resume
+            raise HTTPException(
+                status_code=400,
+                detail="Task continuation requires JSON mode to be enabled",
+            )
+    except SessionNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tmux session for task {task_id} not found",
+        )
+
+    logger.info(f"Task {task_id} continued with prompt (continuation #{task.continuation_count})")
+    return ActionResponse(
+        status="ok",
+        message=f"Task continued with new prompt (continuation #{task.continuation_count})",
         task_id=task_id,
     )
 

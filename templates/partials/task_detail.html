@@ -35,11 +35,37 @@
             <span class="value">{{ task.claude_restarts }}</span>
         </div>
         <div class="info-item">
+            <span class="label">Continuations:</span>
+            <span class="value">{{ task.continuation_count }}</span>
+        </div>
+        {% if task.claude_session_id %}
+        <div class="info-item">
+            <span class="label">Session ID:</span>
+            <span class="value" style="font-size: 0.8em; font-family: monospace;">{{ task.claude_session_id[:16] }}...</span>
+        </div>
+        {% endif %}
+        <div class="info-item">
             <span class="label">Created:</span>
             <span class="value">{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
         </div>
     </div>
 </div>
+
+<!-- Prompt History (if any) -->
+{% if task.prompt_history %}
+<div class="prompt-history-section">
+    <div class="prompt-history-header">Prompt History</div>
+    <div class="prompt-history-content">
+        {% set prompts = task.prompt_history | from_json %}
+        {% for prompt in prompts %}
+        <div class="prompt-item">
+            <span class="prompt-number">#{{ loop.index }}</span>
+            <span class="prompt-text">{{ prompt }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Action Buttons -->
 <div class="task-actions">
@@ -67,6 +93,23 @@
     </button>
 
     {% elif task.status.value == 'running' %}
+    {% if task.claude_status.value == 'stopped' and task.claude_session_id %}
+    <!-- Continue Task: Claude stopped, can resume with new prompt -->
+    <div class="continue-task-form">
+        <input type="text"
+               id="continue-prompt-{{ task.id }}"
+               placeholder="Next prompt to continue task..."
+               class="message-input">
+        <button class="btn btn-primary"
+                hx-post="/dashboard/tasks/{{ task.id }}/continue"
+                hx-target="#task-detail"
+                hx-swap="innerHTML"
+                hx-include="#continue-prompt-{{ task.id }}"
+                hx-vals='js:{prompt: document.getElementById("continue-prompt-{{ task.id }}").value}'>
+            Continue Task
+        </button>
+    </div>
+    {% endif %}
     <button class="btn btn-secondary"
             hx-post="/dashboard/tasks/{{ task.id }}/restart-claude"
             hx-target="#task-detail"

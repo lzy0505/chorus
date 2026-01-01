@@ -10,9 +10,9 @@
 - Deep understanding of Claude Code `-p` flag, permissions, and session resumption
 
 **Next:** Phase 8 - Enhanced UX Features 🔄
-- Permission configuration UI
-- Task continuation workflow
-- Granular status tracking with activity context
+- ✅ Permission configuration (acceptEdits mode)
+- ✅ Task continuation workflow with --resume
+- Granular status tracking with activity context (8.3)
 
 ## Current Phase: Enhanced UX Features 🔄
 
@@ -108,29 +108,38 @@
 
 ## Phase 8: Enhanced UX Features (Next Steps)
 
-### 8.1: Permission Configuration 🔄
-**Goal:** Task-scoped permission management
+### 8.1: Permission Configuration ✅ (COMPLETED 2026-01-01)
+**Goal:** Default permission mode for `-p` compatibility
 
-- [ ] Add fields to Task model:
-  - [ ] `allowed_tools: Optional[str]`
-  - [ ] `permission_mode: str = "acceptEdits"`
-- [ ] Create permission profile presets
-  - [ ] `read_only` - Read/Grep/Glob only
-  - [ ] `safe_edit` - Read + Edit/Write
-  - [ ] `full_dev` - Bash + Edit
-- [ ] Update `start_claude_json_mode()` to use task permissions
-- [ ] Add permission UI to task creation form
-- [ ] Show active permissions in task detail view
+- [x] Default to `--permission-mode acceptEdits` in `start_claude_json_mode()`
+  - Auto-approves file edits (Read, Write, Edit)
+  - Still prompts for Bash commands (safety)
+  - Compatible with `-p` mode atomic execution
 
-### 8.2: Task Continuation UI 🔄
+**Decision:** Interactive permissions don't work with `-p` flag (no `permission_request` events in SDK mode). Using pre-approval is the practical approach for orchestration.
+
+**Future enhancements (deferred):**
+- [ ] Add fields to Task model for per-task configuration
+- [ ] Permission profile presets (read_only, safe_edit, full_dev)
+- [ ] Permission UI in task creation form
+
+### 8.2: Task Continuation UI ✅ (COMPLETED 2026-01-01)
 **Goal:** Make resumption easy and obvious
 
-- [ ] Add "Continue Task" button when `claude_status = stopped`
-- [ ] Input field for next prompt
-- [ ] Auto-use `--resume` with saved `claude_session_id`
-- [ ] Show session ID in UI
-- [ ] Track continuation count
-- [ ] Show prompt history (each `-p` invocation)
+- [x] Add "Continue Task" button when `claude_status = stopped`
+- [x] Input field for next prompt
+- [x] Auto-use `--resume` with saved `claude_session_id`
+- [x] Show session ID in UI
+- [x] Track continuation count
+- [x] Show prompt history (each `-p` invocation)
+
+**Implementation:**
+- Added `continuation_count` and `prompt_history` fields to Task model
+- Created `/api/tasks/{task_id}/continue` endpoint using `--resume` flag
+- UI shows "Continue Task" form when Claude stopped with session available
+- Prompt history displayed in collapsible section with numbered list
+- Session ID shown truncated in info grid
+- Continuation count tracked and displayed
 
 ### 8.3: Granular Status Tracking 🔄
 **Goal:** Show what Claude is actually doing
