@@ -275,30 +275,57 @@ task = Task(
 
 ## Recommendations for Chorus
 
-1. **Always use `--allowedTools` or `--permission-mode` when starting tasks**
-   - Never rely on default blocking behavior in tmux
-   - Configure permissions at task creation time
+### 🎯 Recommended: Interactive Permission Handling
 
-2. **Default to `--permission-mode acceptEdits` for most tasks**
-   - Safe for file modifications
-   - Still prompts for dangerous Bash commands
-   - Good balance of safety and automation
+**Don't bypass permissions - handle them interactively!**
 
-3. **For read-only analysis, use `--permission-mode plan`**
-   - First step in multi-step tasks
-   - Safe exploration before modifications
+See **[INTERACTIVE_PERMISSIONS.md](INTERACTIVE_PERMISSIONS.md)** for full details.
 
-4. **Store permission config in Task model**
+**Why Interactive is Better:**
+- ✅ See exactly what Claude wants to do
+- ✅ Approve/deny each operation
+- ✅ Better security and control
+- ✅ User stays informed
+
+**How it works:**
+1. Don't use `--allowedTools` or `--permission-mode`
+2. Let Claude ask for permission normally
+3. JsonMonitor detects `permission_request` event
+4. UI shows permission dialog with Approve/Deny buttons
+5. User response sent to tmux via `send_confirmation()`
+6. Claude continues processing
+
+**Already implemented!** The infrastructure exists, just needs enhanced UI.
+
+---
+
+### Alternative: Pre-Approval (When Needed)
+
+For automated workflows where interaction isn't desired:
+
+1. **For safe file editing:**
+   ```python
+   permission_mode = "acceptEdits"  # Auto-approve Edit/Write
+   allowed_tools = None             # Still ask for Bash
+   ```
+
+2. **For specific bash patterns:**
+   ```python
+   permission_mode = "default"
+   allowed_tools = "Bash(git *:*),Read,Edit"  # Only git commands
+   ```
+
+3. **For read-only analysis:**
+   ```python
+   permission_mode = "plan"  # No edits allowed
+   ```
+
+4. **Store per-task configuration:**
    - User selects at task creation
    - Persists across Claude restarts
    - Easy to audit and modify
 
-5. **Consider PermissionRequest hook for advanced cases**
-   - Dynamic approval based on task context
-   - Logging and auditing
-   - Integration with external approval systems
-
-6. **Show permission status in UI**
+5. **Show permission status in UI:**
    - Display active permission mode
    - Show allowed tools
    - Warn when bypassing permissions
