@@ -151,16 +151,21 @@ class JsonMonitor:
 
             case "text":
                 content = event.data.get("text", "")
-                # Only show non-empty, substantial text
+                # Show meaningful text from Claude
                 content = content.strip()
-                if not content or len(content) < 10:
-                    return None  # Skip very short or empty text
-                if len(content) > 200:
-                    content = content[:200] + "..."
+                if not content:
+                    return None  # Skip empty text
+                # Show first meaningful chunk
+                if len(content) > 300:
+                    content = content[:300] + "..."
                 return f"[{timestamp}] 💬 {content}"
 
-            case "assistant" | "user":
-                # Skip these - too noisy, not useful
+            case "assistant":
+                # Skip - too noisy
+                return None
+
+            case "user":
+                # Skip - too noisy
                 return None
 
             case "result":
