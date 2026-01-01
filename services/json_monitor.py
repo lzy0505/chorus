@@ -200,12 +200,15 @@ class JsonMonitor:
             case "result":
                 # Show result/completion events
                 result = event.data.get("result", {})
-                stop_reason = result.get("stopReason", "unknown")
-                usage = result.get("usage", {})
-                input_tokens = usage.get("inputTokens", 0)
-                output_tokens = usage.get("outputTokens", 0)
-
-                return f"[{timestamp}] 🏁 Completed (reason: {stop_reason}, tokens: {input_tokens}→{output_tokens})"
+                # Result can be a string or dict
+                if isinstance(result, dict):
+                    stop_reason = result.get("stopReason", "unknown")
+                    usage = result.get("usage", {})
+                    input_tokens = usage.get("inputTokens", 0)
+                    output_tokens = usage.get("outputTokens", 0)
+                    return f"[{timestamp}] 🏁 Completed (reason: {stop_reason}, tokens: {input_tokens}→{output_tokens})"
+                else:
+                    return f"[{timestamp}] 🏁 Result: {str(result)[:100]}"
 
             case "permission_request":
                 prompt = event.data.get("prompt", "Permission requested")
