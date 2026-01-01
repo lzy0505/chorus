@@ -180,12 +180,32 @@ class JsonMonitor:
                 return f"[{timestamp}] 💬 {combined}"
 
             case "user":
-                # Skip - too noisy
+                # Show user input
+                message = event.data.get("message", {})
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    content = content.strip()
+                elif isinstance(content, list):
+                    # Extract text from content blocks
+                    texts = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            texts.append(block.get("text", ""))
+                    content = " ".join(texts).strip()
+
+                if content:
+                    return f"[{timestamp}] 👤 User: {content}"
                 return None
 
             case "result":
-                # Skip - not informative, we already show the actual content
-                return None
+                # Show result/completion events
+                result = event.data.get("result", {})
+                stop_reason = result.get("stopReason", "unknown")
+                usage = result.get("usage", {})
+                input_tokens = usage.get("inputTokens", 0)
+                output_tokens = usage.get("outputTokens", 0)
+
+                return f"[{timestamp}] 🏁 Completed (reason: {stop_reason}, tokens: {input_tokens}→{output_tokens})"
 
             case "permission_request":
                 prompt = event.data.get("prompt", "Permission requested")
@@ -196,12 +216,13 @@ class JsonMonitor:
                 return f"[{timestamp}] ❌ Error: {error_msg}"
 
             case "system":
-                # Skip system events - internal only
-                return None
+                # Show system events for debugging
+                content = str(event.data)[:100]
+                return f"[{timestamp}] ⚙️  System: {content}"
 
             case _:
-                # Skip unknown events to reduce noise
-                return None
+                # Show unknown events for debugging
+                return f"[{timestamp}] ❓ {event_type}: {str(event.data)[:100]}"
 
     async def _monitor_task(self, task_id: UUID):
         """Monitor a specific task for JSON events.
