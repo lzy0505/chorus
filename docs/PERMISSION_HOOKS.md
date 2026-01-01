@@ -6,12 +6,24 @@ Chorus implements **per-task permission policies** using Claude Code's `Permissi
 
 **Key Features:**
 - ✅ Task-specific permission policies stored in database
-- ✅ Per-task Claude config isolation (`CLAUDE_CONFIG_DIR`)
+- ✅ **Strong isolation via `CLAUDE_CONFIG_DIR`** - no cross-task contamination
 - ✅ Predefined permission profiles (read_only, safe_edit, full_dev, git_only)
 - ✅ Works with `-p` flag (non-interactive mode)
 - ✅ Programmatic allow/deny decisions
 - ✅ File pattern and bash command filtering
 - ✅ Audit logging via stderr
+
+## Isolation Guarantees
+
+**Critical Security Feature:** Each task's permission policy is completely isolated:
+
+1. **Task ID derived from `CLAUDE_CONFIG_DIR`** - Not from hook input (which could be spoofed)
+2. **Separate config directories** - Each task has `/tmp/chorus/config/task-{uuid}/.claude/`
+3. **Environment-based isolation** - Claude sets `CLAUDE_CONFIG_DIR` per process
+4. **Database lookup per task** - Permission handler queries DB using extracted task UUID
+5. **No global config pollution** - Tasks never touch `~/.claude/`
+
+**Verification:** Run `/tmp/verify_permission_isolation.sh` to verify isolation
 
 ---
 
