@@ -555,6 +555,83 @@ h1 {
     content: '☀️';
 }
 
+/* Panel Toggle Button */
+.panel-header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.panel-toggle {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.panel-toggle:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
+}
+
+.toggle-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.task-panel.collapsed .toggle-icon {
+    transform: rotate(180deg);
+}
+
+/* Collapsed task panel state */
+.task-panel {
+    transition: all 0.3s ease;
+}
+
+.task-panel.collapsed {
+    width: 60px !important;
+    min-width: 60px !important;
+}
+
+.task-panel.collapsed .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.task-panel.collapsed .panel-header-content {
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.task-panel.collapsed .panel-header-content > span {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+.task-panel.collapsed .filter-tabs,
+.task-panel.collapsed #task-list {
+    display: none;
+}
+
+.task-panel.collapsed .panel-toggle {
+    align-self: center;
+}
+
+/* Adjust detail panel to take more space when task panel is collapsed */
+.dashboard {
+    transition: grid-template-columns 0.3s ease;
+}
+
+.task-panel.collapsed ~ .detail-panel {
+    grid-column: span 2;
+}
+
 /* Interactive Log Items */
 .log-container {
     background: var(--bg-tertiary);
