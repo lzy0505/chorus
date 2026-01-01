@@ -36,6 +36,11 @@
     padding: 0;
 }
 
+html, body {
+    overflow-x: hidden;
+    width: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-primary);
@@ -51,6 +56,18 @@ body {
     padding: 1rem;
     width: 100%;
     box-sizing: border-box;
+}
+
+/* Ensure all content wraps and doesn't cause horizontal overflow */
+* {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Force text wrapping */
+p, div, span, pre, code {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 header {
