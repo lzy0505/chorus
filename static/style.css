@@ -618,24 +618,32 @@ h1 {
     grid-column: 2 !important;
 }
 
-/* Collapsed task panel content */
+/* Collapsed task panel content - aggressive hiding */
 .task-panel.collapsed .panel-header-content span {
-    display: none;
+    display: none !important;
 }
 
 .task-panel.collapsed .filter-tabs {
-    display: none;
+    display: none !important;
 }
 
-.task-panel.collapsed #task-list {
-    display: none;
+.task-panel.collapsed #task-list,
+.task-panel.collapsed #task-list * {
+    display: none !important;
 }
 
 .task-panel.collapsed .panel-header {
     flex-direction: column;
-    padding: 1rem 0.5rem;
+    padding: 0.5rem;
     margin: 0;
     border: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.task-panel.collapsed .panel-header-content {
+    width: 100%;
+    justify-content: center;
 }
 
 .task-panel.collapsed .panel-toggle {
@@ -643,7 +651,7 @@ h1 {
     height: 40px;
     border-radius: 50%;
     padding: 0;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
 }
