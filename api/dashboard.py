@@ -128,11 +128,81 @@ async def get_task_output(
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
         return HTMLResponse("<div class='output-header'>Live Output (JSON Events)</div><div class='output-content'><pre class='muted'>No active session</pre></div>")
 
-    # Return last output from JSON monitor
+    # Return last output from JSON monitor as structured log items
     output = task.last_output or "Waiting for output..."
+
+    # Parse log lines and create interactive items
     import html
-    escaped = html.escape(output)
-    return HTMLResponse(f"<div class='output-header'>Live Output (JSON Events)</div><div class='output-content'><pre>{escaped}</pre></div>")
+    import re
+
+    lines = output.strip().split('\n')
+    log_items = []
+
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+
+        # Parse log format: [HH:MM:SS] emoji message
+        match = re.match(r'\[(\d{2}:\d{2}:\d{2})\]\s+(.+)', line)
+        if not match:
+            continue
+
+        timestamp = match.group(1)
+        content = match.group(2)
+
+        # Determine log type from emoji
+        log_type = 'info'
+        if content.startswith('🔧'):
+            log_type = 'tool'
+        elif content.startswith(('✅', '✓')):
+            log_type = 'success'
+        elif content.startswith('❌'):
+            log_type = 'error'
+        elif content.startswith('⚠️'):
+            log_type = 'warning'
+        elif content.startswith('💬'):
+            log_type = 'message'
+        elif content.startswith('👤'):
+            log_type = 'user'
+        elif content.startswith('🚀'):
+            log_type = 'session'
+
+        # Check if content is long (needs folding)
+        is_long = len(content) > 150
+        preview = content[:150] + '...' if is_long else content
+
+        # Build log item HTML
+        expanded_class = ' expanded' if not is_long else ''
+        expand_script = '''onclick="
+            this.classList.toggle('expanded');
+            const content = this.querySelector('.log-content');
+            if (this.classList.contains('expanded')) {
+                content.textContent = this.dataset.full;
+            } else {
+                content.textContent = this.dataset.preview;
+            }
+        "''' if is_long else ''
+
+        item_html = f'''
+        <div class="log-item log-{log_type}{expanded_class}"
+             data-full="{html.escape(content)}"
+             data-preview="{html.escape(preview)}"
+             {expand_script}>
+            <span class="log-timestamp">{timestamp}</span>
+            <span class="log-content">{html.escape(preview)}</span>
+            {'<span class="log-expand-hint">▼ Click to expand</span>' if is_long else ''}
+        </div>
+        '''
+        log_items.append(item_html.strip())
+
+    items_html = '\n'.join(log_items) if log_items else '<div class="log-empty">Waiting for output...</div>'
+
+    return HTMLResponse(f'''
+    <div class='output-header'>Live Output (JSON Events)</div>
+    <div class='output-content log-container'>
+        {items_html}
+    </div>
+    ''')
 
 
 @router.post("/tasks/{task_id}/send", response_class=HTMLResponse)
