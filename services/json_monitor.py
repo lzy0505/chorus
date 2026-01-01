@@ -244,6 +244,16 @@ class JsonMonitor:
                     logger.info(f"Task {task_id} no longer exists, stopping monitoring")
                     break
 
+                # Check if tmux session still exists
+                if not self.tmux.session_exists(task_id):
+                    logger.info(f"Tmux session for task {task_id} terminated")
+                    # Update status to stopped when Claude process exits
+                    task.claude_status = ClaudeStatus.stopped
+                    task.claude_activity = None
+                    self.db.commit()
+                    # Stop monitoring this task
+                    break
+
                 # Capture JSON events from tmux
                 output = self.tmux.capture_json_events(task_id)
 
@@ -263,9 +273,18 @@ class JsonMonitor:
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Error monitoring task {task_id}: {e}", exc_info=True)
-                # Check if it's a session error - if so, stop monitoring this task
+                # Check if it's a session error - if so, update status and stop monitoring
                 if "not found" in str(e).lower():
-                    logger.info(f"Session for task {task_id} not found, stopping monitoring")
+                    logger.info(f"Session for task {task_id} not found, updating status")
+                    try:
+                        statement = select(Task).where(Task.id == task_id)
+                        task = self.db.exec(statement).first()
+                        if task:
+                            task.claude_status = ClaudeStatus.stopped
+                            task.claude_activity = None
+                            self.db.commit()
+                    except Exception as db_error:
+                        logger.error(f"Error updating task status: {db_error}")
                     break
                 await asyncio.sleep(self.poll_interval)
 
