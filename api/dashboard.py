@@ -199,8 +199,7 @@ async def get_task_output(
     items_html = '\n'.join(log_items) if log_items else '<div class="log-empty">Waiting for output...</div>'
 
     return HTMLResponse(f'''
-    <div class='output-header'>Live Output (JSON Events)</div>
-    <div class='output-content log-container'>
+    <div class='log-container'>
         {items_html}
     </div>
     ''')
