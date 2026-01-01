@@ -634,9 +634,56 @@ h1 {
     border-radius: 50%;
 }
 
-.task-panel.collapsed .filter-tabs,
-.task-panel.collapsed #task-list {
+.task-panel.collapsed .filter-tabs {
     display: none;
+}
+
+/* Compact task list when collapsed */
+.task-panel.collapsed #task-list {
+    padding: 0.25rem;
+}
+
+.task-panel.collapsed .task-item {
+    padding: 0;
+    margin: 0.25rem 0;
+    min-height: 8px;
+    height: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.task-panel.collapsed .task-item:hover {
+    height: 12px;
+    margin: 0.5rem 0;
+}
+
+.task-panel.collapsed .task-header,
+.task-panel.collapsed .task-meta {
+    display: none;
+}
+
+/* Show only status color as indicator */
+.task-panel.collapsed .task-item {
+    background: var(--bg-secondary);
+    border-left: 40px solid var(--text-secondary);
+}
+
+.task-panel.collapsed .task-item.task-running {
+    border-left-color: var(--accent-blue);
+}
+
+.task-panel.collapsed .task-item.task-waiting {
+    border-left-color: var(--accent-yellow);
+}
+
+.task-panel.collapsed .task-item.task-completed {
+    border-left-color: var(--accent-green);
+}
+
+.task-panel.collapsed .task-item.task-failed {
+    border-left-color: var(--accent-red);
 }
 
 /* Detail panel takes full remaining space when task panel is collapsed */
