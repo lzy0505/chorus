@@ -120,7 +120,7 @@ async def get_task_output(
     task_id: UUID,
     db: Session = Depends(get_db),
 ):
-    """Get raw tmux output."""
+    """Get formatted JSON output."""
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -128,18 +128,42 @@ async def get_task_output(
     if task.status not in (TaskStatus.running, TaskStatus.waiting):
         return HTMLResponse("<pre class='muted'>No active session</pre>")
 
-    # Get raw output from tmux
+    # Get raw output from tmux and format as JSON
     from services.tmux import TmuxService
+    import json
+    import html
+
     tmux = TmuxService()
     try:
         raw_output = tmux.capture_json_events(task_id)
         if not raw_output:
-            raw_output = "Waiting for output..."
-    except Exception:
-        raw_output = "Session not found"
+            return HTMLResponse("<pre>Waiting for output...</pre>")
 
-    import html
-    return HTMLResponse(f"<pre>{html.escape(raw_output)}</pre>")
+        # Parse each line as JSON and pretty-print
+        lines = raw_output.strip().split('\n')
+        formatted_events = []
+
+        for line in lines:
+            line = line.strip()
+            if not line or not line.startswith('{'):
+                continue
+            try:
+                event = json.loads(line)
+                formatted = json.dumps(event, indent=2)
+                formatted_events.append(formatted)
+            except json.JSONDecodeError:
+                # Include non-JSON lines as-is
+                formatted_events.append(line)
+
+        if not formatted_events:
+            output = "No JSON events yet..."
+        else:
+            output = "\n\n".join(formatted_events)
+
+    except Exception as e:
+        output = f"Error: {str(e)}"
+
+    return HTMLResponse(f"<pre>{html.escape(output)}</pre>")
 
 
 @router.post("/tasks/{task_id}/send", response_class=HTMLResponse)
