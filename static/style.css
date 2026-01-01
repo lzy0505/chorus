@@ -168,6 +168,42 @@ h1 {
     min-height: 60px;
 }
 
+/* Permission Profile Selector */
+.permission-profile-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.profile-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    min-width: 90px;
+}
+
+.profile-select {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.profile-select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+}
+
+.profile-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
 /* Panels */
 .panel {
     background: var(--bg-secondary);

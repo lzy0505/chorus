@@ -70,6 +70,9 @@ class Task(SQLModel, table=True):
     last_output: str = Field(default="")  # Last ~10000 chars of formatted log output
     permission_prompt: Optional[str] = Field(default=None)
 
+    # Permission policy (task-specific, enforced via PermissionRequest hooks)
+    permission_policy: str = Field(default="")  # JSON object with allowed tools, patterns, auto-approve rules
+
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)  # When tmux was spawned

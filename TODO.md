@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-01 16:01
+> Auto-updated by Claude Code. Last update: 2026-01-01 16:23
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -89,11 +89,17 @@
 ## Completed
 
 ### Phase 8: Enhanced UX Features (2026-01-01)
-- ✅ **8.1: Permission Configuration**
-  - Default `--permission-mode acceptEdits` for `-p` compatibility
-  - Auto-approves file edits (Read, Write, Edit)
-  - Still prompts for Bash commands (safety)
-  - Documented in `docs/PERMISSION_HANDLING.md`
+- ✅ **8.1: Permission Configuration with PermissionRequest Hooks**
+  - Implemented per-task permission policies using PermissionRequest hooks
+  - Per-task Claude config isolation (`/tmp/chorus/config/task-{uuid}/.claude/`)
+  - Permission handler script queries Chorus database for task policies
+  - Predefined profiles: read_only, safe_edit, full_dev, git_only
+  - UI: Permission profile selector in task creation form
+  - Granular control: bash command patterns, file patterns, tool allowlists
+  - Works with `-p` flag (non-interactive mode)
+  - Audit logging: All permission decisions logged to stderr
+  - Files: `services/claude_config.py`, `/tmp/chorus/hooks/permission-handler.py`
+  - Documented in `docs/PERMISSION_HOOKS.md`
 - ✅ **8.2: Task Continuation UI**
   - Added `continuation_count` and `prompt_history` fields to Task model
   - Created `/api/tasks/{task_id}/continue` endpoint with `--resume` support

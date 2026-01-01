@@ -33,6 +33,7 @@ class TaskCreate(BaseModel):
     title: str
     description: str = ""
     priority: int = 0
+    permission_profile: str = "full_dev"  # read_only, safe_edit, full_dev, git_only
 
 
 class TaskUpdate(BaseModel):
@@ -141,15 +142,21 @@ async def create_task(
     to create the GitButler stack and start Claude.
     """
     logger.info(f"Creating task: {task_data.title}")
+
+    # Get permission policy from profile
+    from services.claude_config import get_permission_profile
+    permission_policy = get_permission_profile(task_data.permission_profile)
+
     task = Task(
         title=task_data.title,
         description=task_data.description,
         priority=task_data.priority,
+        permission_policy=json.dumps(permission_policy),
     )
     db.add(task)
     db.commit()
     db.refresh(task)
-    logger.info(f"Created task {task.id}: {task.title}")
+    logger.info(f"Created task {task.id}: {task.title} (permission_profile={task_data.permission_profile})")
     return task
 
 
@@ -216,6 +223,10 @@ async def delete_task(
             detail="Cannot delete running task. Complete or fail it first.",
         )
 
+    # Cleanup task-specific Claude config
+    from services.claude_config import cleanup_task_claude_config
+    cleanup_task_claude_config(task_id)
+
     db.delete(task)
     db.commit()
 
@@ -280,6 +291,23 @@ async def start_task(
 
     # 3. Ensure hooks config exists (shared across all sessions)
     hooks.ensure_hooks()
+
+    # 3b. Create task-specific Claude config with permission hooks
+    from services.claude_config import create_task_claude_config, get_default_permission_policy
+
+    # Use task's permission policy if set, otherwise use default
+    if task.permission_policy:
+        try:
+            policy = json.loads(task.permission_policy)
+        except json.JSONDecodeError:
+            logger.warning(f"Invalid permission_policy JSON for task {task_id}, using default")
+            policy = get_default_permission_policy()
+    else:
+        policy = get_default_permission_policy()
+        task.permission_policy = json.dumps(policy)
+
+    create_task_claude_config(task_id, permission_policy=policy)
+    logger.info(f"Created task-specific Claude config with permission policy")
 
     # 4. Update task status
     task.status = TaskStatus.running

@@ -286,23 +286,34 @@ class TmuxService:
 
         logger.info(f"Starting Claude Code (JSON mode) for task {task_id} in session {session_id}")
 
-        # JSON mode: Don't use hooks config directory - hooks interfere with JSON output!
-        # Just use default Claude config or environment variables
-        env_vars = []
+        # Set task-specific Claude config directory for per-task hooks
+        from services.claude_config import get_task_config_dir
+        task_config_dir = get_task_config_dir(task_id)
+
+        env_vars = [f'CLAUDE_CONFIG_DIR="{task_config_dir}"']
+
+        # Set CHORUS_DB_PATH for permission handler script
+        from config import get_config
+        config = get_config()
+        db_path = Path(config.database_url.replace("sqlite:///", ""))
+        env_vars.append(f'CHORUS_DB_PATH="{db_path}"')
+
+        # Pass through OAuth token if set
         oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if oauth_token:
             env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
-        env_prefix = " ".join(env_vars) if env_vars else ""
+
+        env_prefix = " ".join(env_vars)
 
         # Build Claude command with JSON output format
         # Note: --verbose is required when using -p with --output-format stream-json
-        # Use --permission-mode acceptEdits to auto-approve file edits (still prompts for Bash)
+        # Permissions are now handled by per-task PermissionRequest hooks
         if context_file and context_file.exists():
-            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose --permission-mode acceptEdits'.format(context_file=context_file)
+            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            base_cmd = "claude --output-format stream-json --verbose --permission-mode acceptEdits"
-            logger.debug("Starting Claude (JSON) with acceptEdits permission mode")
+            base_cmd = "claude --output-format stream-json --verbose"
+            logger.debug("Starting Claude (JSON) with per-task permission hooks")
 
         claude_cmd = f"{env_prefix} {base_cmd}".strip() if env_prefix else base_cmd
 

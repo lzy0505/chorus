@@ -109,19 +109,35 @@
 ## Phase 8: Enhanced UX Features (Next Steps)
 
 ### 8.1: Permission Configuration ✅ (COMPLETED 2026-01-01)
-**Goal:** Default permission mode for `-p` compatibility
+**Goal:** Task-specific permission policies with PermissionRequest hooks
 
-- [x] Default to `--permission-mode acceptEdits` in `start_claude_json_mode()`
-  - Auto-approves file edits (Read, Write, Edit)
-  - Still prompts for Bash commands (safety)
-  - Compatible with `-p` mode atomic execution
+- [x] Implemented per-task permission policies using PermissionRequest hooks
+- [x] Per-task Claude config isolation (`CLAUDE_CONFIG_DIR`)
+- [x] Permission handler script (`/tmp/chorus/hooks/permission-handler.py`)
+- [x] Permission policy field in Task model
+- [x] Predefined permission profiles (read_only, safe_edit, full_dev, git_only)
+- [x] UI: Permission profile selector in task creation form
+- [x] Service: `claude_config.py` for managing task-specific configs
+- [x] Tmux integration: Set `CLAUDE_CONFIG_DIR` per task
+- [x] Database: Store permission_policy as JSON
+- [x] Cleanup: Remove config on task deletion
 
-**Decision:** Interactive permissions don't work with `-p` flag (no `permission_request` events in SDK mode). Using pre-approval is the practical approach for orchestration.
+**Architecture:**
+```
+/tmp/chorus/
+  hooks/permission-handler.py          # Shared handler (queries DB)
+  config/task-{uuid}/.claude/          # Per-task Claude config
+```
 
-**Future enhancements (deferred):**
-- [ ] Add fields to Task model for per-task configuration
-- [ ] Permission profile presets (read_only, safe_edit, full_dev)
-- [ ] Permission UI in task creation form
+**Benefits over `--permission-mode acceptEdits`:**
+- ✅ Task-specific policies (not global)
+- ✅ Granular control (pattern-based filtering)
+- ✅ Bash command filtering (regex patterns)
+- ✅ File filtering (glob patterns)
+- ✅ Audit logging (all decisions logged)
+- ✅ Works with `-p` flag (non-interactive mode)
+
+**Documentation:** `docs/PERMISSION_HOOKS.md`
 
 ### 8.2: Task Continuation UI ✅ (COMPLETED 2026-01-01)
 **Goal:** Make resumption easy and obvious

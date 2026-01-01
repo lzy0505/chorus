@@ -7,6 +7,16 @@
         <form hx-post="/dashboard/tasks" hx-target="#task-list" hx-swap="afterbegin settle:100ms" hx-on::after-request="this.reset()" class="new-task-form">
             <input type="text" name="title" placeholder="Task title (e.g., 'Add user authentication')" class="task-input" required>
             <textarea name="description" placeholder="Task description (optional)" class="task-textarea" rows="2"></textarea>
+            <div class="permission-profile-row">
+                <label for="permission_profile" class="profile-label">Permissions:</label>
+                <select name="permission_profile" id="permission_profile" class="profile-select">
+                    <option value="full_dev" selected>Full Dev (recommended)</option>
+                    <option value="safe_edit">Safe Edit (read + file edits)</option>
+                    <option value="read_only">Read Only (analysis)</option>
+                    <option value="git_only">Git Only</option>
+                </select>
+                <span class="profile-hint">Controls what tools Claude can use</span>
+            </div>
             <button type="submit" class="btn btn-primary">+ Add Task</button>
         </form>
     </div>
