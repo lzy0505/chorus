@@ -609,8 +609,12 @@ h1 {
 .task-panel.collapsed {
     min-width: 50px;
     max-width: 50px;
+    width: 50px;
     grid-column: 1 !important;
     grid-row: 2 !important;
+    overflow: hidden;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--border-color);
 }
 
 .task-panel.collapsed .panel-header {
