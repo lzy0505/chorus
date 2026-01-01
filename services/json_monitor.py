@@ -281,8 +281,8 @@ class JsonMonitor:
             log_updated = False
             if log_entry:
                 current_output = task.last_output or ""
-                # Keep last ~2000 chars
-                new_output = (current_output + "\n" + log_entry)[-2000:]
+                # Keep last ~10000 chars to show more history
+                new_output = (current_output + "\n" + log_entry)[-10000:]
                 task.last_output = new_output
                 log_updated = True
 

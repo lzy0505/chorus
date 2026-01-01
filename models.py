@@ -64,7 +64,7 @@ class Task(SQLModel, table=True):
     claude_session_id: Optional[str] = Field(default=None)  # For --resume, changes on Claude restart
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
     claude_restarts: int = Field(default=0)
-    last_output: str = Field(default="")  # Last ~2000 chars of terminal output
+    last_output: str = Field(default="")  # Last ~10000 chars of formatted log output
     permission_prompt: Optional[str] = Field(default=None)
 
     # Timestamps

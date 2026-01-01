@@ -173,6 +173,7 @@ async def get_task_output(
 
         # Build log item HTML
         expanded_class = ' expanded' if not is_long else ''
+        clickable_class = ' log-clickable' if is_long else ''
         expand_script = '''onclick="
             this.classList.toggle('expanded');
             const content = this.querySelector('.log-content');
@@ -184,7 +185,7 @@ async def get_task_output(
         "''' if is_long else ''
 
         item_html = f'''
-        <div class="log-item log-{log_type}{expanded_class}"
+        <div class="log-item log-{log_type}{expanded_class}{clickable_class}"
              data-full="{html.escape(content)}"
              data-preview="{html.escape(preview)}"
              {expand_script}>

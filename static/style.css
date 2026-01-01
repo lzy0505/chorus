@@ -709,7 +709,6 @@ h1 {
 .log-item {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-color);
-    cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
     align-items: flex-start;
@@ -717,7 +716,11 @@ h1 {
     position: relative;
 }
 
-.log-item:hover {
+.log-item.log-clickable {
+    cursor: pointer;
+}
+
+.log-item.log-clickable:hover {
     background: var(--bg-secondary);
 }
 
