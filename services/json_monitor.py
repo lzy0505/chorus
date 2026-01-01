@@ -248,19 +248,14 @@ class JsonMonitor:
                     # Parse events
                     events = self.json_parser.parse_output(output)
 
-                    # Only process new events (simple deduplication)
-                    previous_count = self._last_event_count.get(task_id, 0)
-                    new_events = events[previous_count:]
+                    # Process ALL events each time - let log buffer handle deduplication
+                    # (the 10K char buffer naturally handles old events)
+                    if events:
+                        logger.debug(f"Task {task_id}: Processing {len(events)} events")
 
-                    if new_events:
-                        logger.debug(f"Task {task_id}: Found {len(new_events)} new events")
-
-                        # Process each new event
-                        for event in new_events:
+                        # Process each event
+                        for event in events:
                             await self._handle_event(task_id, event)
-
-                        # Update event count
-                        self._last_event_count[task_id] = len(events)
 
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
