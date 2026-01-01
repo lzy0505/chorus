@@ -88,6 +88,8 @@ Chorus uses **JSON-based monitoring** for Claude Code sessions. Set `monitoring.
 - **Real-time status updates** — Event-driven architecture
 - **More reliable** — No regex pattern matching, structured data
 
+**Documentation:** See `docs/JSON_EVENTS.md` for complete JSON event format specification.
+
 **Important: Two Different "Hooks" Systems**
 
 Chorus uses the term "hooks" in two different contexts:
