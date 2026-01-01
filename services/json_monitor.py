@@ -176,10 +176,8 @@ class JsonMonitor:
                 if not texts:
                     return None
 
-                # Combine and truncate
+                # Combine all text blocks (don't truncate - let UI handle long content)
                 combined = " ".join(texts)
-                if len(combined) > 300:
-                    combined = combined[:300] + "..."
 
                 return f"[{timestamp}] 💬 {combined}"
 
