@@ -60,8 +60,12 @@ body {
 
 /* Ensure all content wraps and doesn't cause horizontal overflow */
 * {
-    max-width: 100%;
     box-sizing: border-box;
+}
+
+/* Prevent horizontal overflow but allow grid to work properly */
+.dashboard, .panel {
+    max-width: 100%;
 }
 
 /* Force text wrapping */
@@ -665,6 +669,9 @@ h1 {
 
 .dashboard.collapsed-mode .detail-panel {
     grid-column: 2 !important;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 /* Alternative: if collapsed-mode isn't working, try this */
