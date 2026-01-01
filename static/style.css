@@ -612,10 +612,19 @@ h1 {
     width: 60px !important;
     min-width: 60px !important;
     max-width: 60px !important;
+    overflow: hidden !important;
 }
 
 .dashboard.collapsed-mode .detail-panel {
     grid-column: 2 !important;
+}
+
+/* Alternative: if collapsed-mode isn't working, try this */
+.task-panel.collapsed {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+    overflow: hidden !important;
 }
 
 /* Collapsed task panel content - aggressive hiding */
