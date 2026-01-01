@@ -86,9 +86,31 @@ Chorus uses **JSON-based monitoring** for Claude Code sessions. Set `monitoring.
 - **Deterministic event detection** — Parse structured JSON events from Claude
 - **Session resumption** — Extract `session_id` from JSON for `--resume`
 - **Real-time status updates** — Event-driven architecture
+- **Permission handling** — Non-interactive permission management with `--allowedTools`
+- **Multi-step task support** — Resume sessions with `-p --resume` for sequential work
 - **More reliable** — No regex pattern matching, structured data
 
-**Documentation:** See `docs/JSON_EVENTS.md` for complete JSON event format specification.
+**Critical Concepts:**
+
+1. **`-p` Flag (SDK Mode)**: Claude runs non-interactively, processes prompt, exits atomically
+   - Task completion ≠ Process termination
+   - Use `--resume` to continue multi-step tasks
+   - See `docs/TERMINATION_HANDLING.md` for lifecycle patterns
+
+2. **Permission Management**: Without permission flags, `-p` blocks indefinitely
+   - Use `--allowedTools` to pre-approve tools
+   - Use `--permission-mode acceptEdits` for safe file editing
+   - See `docs/PERMISSION_HANDLING.md` for configuration strategies
+
+3. **Status Tracking**: Derive granular status from JSON events
+   - `idle`, `thinking`, `reading`, `editing`, `running`, `waiting`, `stopped`
+   - See `docs/STATUS_TRACKING.md` for implementation recommendations
+
+**Documentation:**
+- `docs/JSON_EVENTS.md` - Complete JSON event format specification
+- `docs/TERMINATION_HANDLING.md` - Process termination and task continuation patterns
+- `docs/PERMISSION_HANDLING.md` - Permission configuration for non-interactive sessions
+- `docs/STATUS_TRACKING.md` - Granular status tracking from events
 
 **Important: Two Different "Hooks" Systems**
 
@@ -132,3 +154,7 @@ Keep docs proportional to the change — major changes need thorough updates, mi
 | `design.md` | Architecture, data models, API spec, implementation details |
 | `PLAN.md` | Current phase, task breakdown, notes |
 | `README.md` | Quick start, configuration |
+| `docs/JSON_EVENTS.md` | Claude Code JSON event format specification (10 event types) |
+| `docs/TERMINATION_HANDLING.md` | Process termination, `-p` flag behavior, session resumption |
+| `docs/PERMISSION_HANDLING.md` | Permission configuration, `--allowedTools`, profiles |
+| `docs/STATUS_TRACKING.md` | Granular status tracking, activity context, UI design |

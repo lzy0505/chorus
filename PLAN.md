@@ -2,7 +2,19 @@
 
 > Reference: See `design.md` for full specification
 
-## Current Phase: UUID + GitButler Hooks Migration 🔄
+## Current Status (2026-01-01)
+
+**Completed:** Phases 1-7 ✅
+- Core foundation, Task API, Dashboard, GitButler hooks integration
+- Comprehensive JSON monitoring documentation and improvements
+- Deep understanding of Claude Code `-p` flag, permissions, and session resumption
+
+**Next:** Phase 8 - Enhanced UX Features 🔄
+- Permission configuration UI
+- Task continuation workflow
+- Granular status tracking with activity context
+
+## Current Phase: Enhanced UX Features 🔄
 
 ### Phase 1: Core Foundation ✅
 - [x] Project structure
@@ -34,6 +46,114 @@
 - [ ] `services/documents.py` - Document manager with file discovery
 - [ ] `api/documents.py` - Document endpoints
 - [ ] Document reference endpoints for task context
+
+---
+
+## Phase 7: JSON Monitoring Enhancements ✅ (COMPLETED 2026-01-01)
+
+**Summary:** Deep understanding of Claude Code behavior, comprehensive documentation
+
+### Completed ✅
+- [x] **JSON Event Documentation** (`docs/JSON_EVENTS.md`)
+  - 10 event types fully documented
+  - Event flow diagrams
+  - Implementation notes for event pairing
+
+- [x] **Termination Handling** (`docs/TERMINATION_HANDLING.md`)
+  - Understanding `-p` flag behavior (atomic, exits after completion)
+  - Task continuation patterns with `--resume`
+  - Process termination detection and status updates
+  - Multi-step task workflows
+
+- [x] **Permission Management** (`docs/PERMISSION_HANDLING.md`)
+  - Default blocking behavior in `-p` mode
+  - `--allowedTools` configuration
+  - `--permission-mode` options
+  - Permission profiles for task types
+
+- [x] **Status Tracking Analysis** (`docs/STATUS_TRACKING.md`)
+  - Granular status from events (thinking, reading, editing, running)
+  - Activity context tracking
+  - UI design recommendations
+
+- [x] **Termination Detection Implementation**
+  - Added `claude_activity` field to Task model
+  - Detect tmux session termination
+  - Set `claude_status = stopped` when process exits
+  - Preserve `claude_session_id` for resumption
+
+- [x] **JSON Output Improvements**
+  - Raw JSON view for debugging
+  - Formatted JSON with proper parsing
+  - Complete event capture (no truncation)
+
+### Key Insights Documented
+
+**1. `-p` Flag (SDK Mode):**
+- ✅ Exits after completing prompt (atomic execution)
+- ❌ Task termination ≠ Task completion
+- 🔄 Use `--resume` for multi-step tasks
+
+**2. Permission Handling:**
+- ❌ Default blocks indefinitely (unusable in tmux)
+- ✅ Must use `--allowedTools` or `--permission-mode`
+- ✅ Recommended: `--permission-mode acceptEdits`
+
+**3. Session Resumption:**
+- Task UUID = GitButler session (persistent)
+- Claude session_id = For `--resume` (changes on restart)
+- Normal pattern: Multiple `-p --resume` invocations per task
+
+---
+
+## Phase 8: Enhanced UX Features (Next Steps)
+
+### 8.1: Permission Configuration 🔄
+**Goal:** Task-scoped permission management
+
+- [ ] Add fields to Task model:
+  - [ ] `allowed_tools: Optional[str]`
+  - [ ] `permission_mode: str = "acceptEdits"`
+- [ ] Create permission profile presets
+  - [ ] `read_only` - Read/Grep/Glob only
+  - [ ] `safe_edit` - Read + Edit/Write
+  - [ ] `full_dev` - Bash + Edit
+- [ ] Update `start_claude_json_mode()` to use task permissions
+- [ ] Add permission UI to task creation form
+- [ ] Show active permissions in task detail view
+
+### 8.2: Task Continuation UI 🔄
+**Goal:** Make resumption easy and obvious
+
+- [ ] Add "Continue Task" button when `claude_status = stopped`
+- [ ] Input field for next prompt
+- [ ] Auto-use `--resume` with saved `claude_session_id`
+- [ ] Show session ID in UI
+- [ ] Track continuation count
+- [ ] Show prompt history (each `-p` invocation)
+
+### 8.3: Granular Status Tracking 🔄
+**Goal:** Show what Claude is actually doing
+
+- [ ] Expand ClaudeStatus enum:
+  - [ ] `thinking`, `reading`, `editing`, `running`
+- [ ] Implement `_update_status_from_event()` in json_monitor
+- [ ] Extract activity context from events
+  - [ ] "Editing main.py"
+  - [ ] "Running git status"
+- [ ] Update UI to show status + activity
+- [ ] Add status icons/colors
+
+### 8.4: Error vs Normal Termination
+**Goal:** Distinguish between success and failure
+
+- [ ] Detect normal termination (result with stopReason: "end_turn")
+- [ ] Detect error termination (error events)
+- [ ] Detect user cancellation (no result event)
+- [ ] UI shows different actions based on termination type:
+  - Normal: "Continue" (default)
+  - Error: "Start Fresh" or "Resume"
+  - Cancelled: "Start Fresh"
 
 ### Phase 5: Polish & Reliability ✅
 - [x] Error handling (2025-12-30)
