@@ -130,6 +130,7 @@ async def get_task_output(
 
     # Get raw output from tmux and format as JSON
     from services.tmux import TmuxService
+    from services.json_parser import JsonEventParser
     import json
     import html
 
@@ -139,25 +140,18 @@ async def get_task_output(
         if not raw_output:
             return HTMLResponse("<pre>Waiting for output...</pre>")
 
-        # Parse each line as JSON and pretty-print
-        lines = raw_output.strip().split('\n')
-        formatted_events = []
+        # Use the JSON parser to handle line-wrapped events
+        parser = JsonEventParser()
+        events = parser.parse_output(raw_output)
 
-        for line in lines:
-            line = line.strip()
-            if not line or not line.startswith('{'):
-                continue
-            try:
-                event = json.loads(line)
-                formatted = json.dumps(event, indent=2)
-                formatted_events.append(formatted)
-            except json.JSONDecodeError:
-                # Include non-JSON lines as-is
-                formatted_events.append(line)
-
-        if not formatted_events:
-            output = "No JSON events yet..."
+        if not events:
+            output = "No JSON events parsed yet...\n\n--- RAW OUTPUT ---\n" + raw_output[:2000]
         else:
+            formatted_events = []
+            for event in events:
+                # Pretty-print the entire event data
+                formatted = json.dumps(event.data, indent=2)
+                formatted_events.append(formatted)
             output = "\n\n".join(formatted_events)
 
     except Exception as e:
