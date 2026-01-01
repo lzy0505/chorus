@@ -36,30 +36,19 @@
     padding: 0;
 }
 
-html, body {
-    height: 100%;
-    overflow: hidden;
-    margin: 0;
-    padding: 0;
-}
-
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
-    display: flex;
-    flex-direction: column;
+    margin: 0;
+    padding: 0;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 1rem;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
 }
 
 header {
@@ -96,9 +85,6 @@ h1 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    flex: 1;
-    overflow: hidden;
-    grid-template-rows: auto 1fr;
 }
 
 .new-task-panel {
@@ -143,13 +129,7 @@ h1 {
     min-height: 200px;
 }
 
-.detail-panel,
-.task-panel {
-    height: 100%;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
+/* Panels expand naturally, body scrolls */
 
 .panel-header {
     display: flex;
