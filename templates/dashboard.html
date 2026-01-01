@@ -16,7 +16,7 @@
         <div class="panel-header">
             <div class="panel-header-content">
                 <span>Tasks</span>
-                <button class="panel-toggle" onclick="document.getElementById('task-panel').classList.toggle('collapsed')" title="Toggle task list">
+                <button class="panel-toggle" onclick="document.getElementById('task-panel').classList.toggle('collapsed'); document.querySelector('.dashboard').classList.toggle('collapsed-mode');" title="Toggle task list">
                     <span class="toggle-icon">◀</span>
                 </button>
             </div>

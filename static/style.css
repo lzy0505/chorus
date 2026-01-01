@@ -589,86 +589,63 @@ h1 {
     transform: rotate(180deg);
 }
 
-/* Collapsed task panel state */
+/* Collapsed task panel - clean slate approach */
+.dashboard {
+    position: relative;
+}
+
 .task-panel {
     transition: all 0.3s ease;
-    overflow: hidden;
 }
 
-/* Adjust grid when task panel is collapsed */
-.dashboard:has(.task-panel.collapsed) {
-    grid-template-columns: 50px 1fr !important;
-    grid-auto-flow: dense;
+/* When collapsed: force 2-column layout */
+.dashboard.collapsed-mode {
+    grid-template-columns: 60px 1fr !important;
 }
 
-.dashboard:has(.task-panel.collapsed) .new-task-panel {
+.dashboard.collapsed-mode .new-task-panel {
     grid-column: 2 !important;
-    grid-row: 1;
 }
 
-.task-panel.collapsed {
-    min-width: 50px;
-    max-width: 50px;
-    width: 50px;
+.dashboard.collapsed-mode .task-panel {
     grid-column: 1 !important;
-    grid-row: 2 !important;
-    overflow: hidden;
-    background: var(--bg-primary);
-    border-right: 1px solid var(--border-color);
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+}
+
+.dashboard.collapsed-mode .detail-panel {
+    grid-column: 2 !important;
+}
+
+/* Collapsed task panel content */
+.task-panel.collapsed .panel-header-content span {
+    display: none;
+}
+
+.task-panel.collapsed .filter-tabs {
+    display: none;
+}
+
+.task-panel.collapsed #task-list {
+    display: none;
 }
 
 .task-panel.collapsed .panel-header {
     flex-direction: column;
-    padding: 0.5rem 0;
-    margin-bottom: 0;
-    border-bottom: none;
-    align-items: center;
-    font-size: 0 !important;
-    line-height: 0 !important;
-}
-
-.task-panel.collapsed .panel-header * {
-    font-size: 0 !important;
-    line-height: 0 !important;
-}
-
-.task-panel.collapsed .panel-header-content {
-    width: 100%;
-    padding: 0;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-}
-
-.task-panel.collapsed .panel-header-content > span {
-    position: absolute !important;
-    left: -9999px !important;
-    width: 0 !important;
-    height: 0 !important;
-    opacity: 0 !important;
+    padding: 1rem 0.5rem;
+    margin: 0;
+    border: none;
 }
 
 .task-panel.collapsed .panel-toggle {
-    display: flex !important;
-    width: 36px;
-    height: 36px;
-    margin: 0;
-    padding: 0;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    padding: 0;
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem !important;
-}
-
-.task-panel.collapsed .filter-tabs,
-.task-panel.collapsed #task-list {
-    display: none !important;
-}
-
-/* Detail panel takes full remaining space when task panel is collapsed */
-.dashboard:has(.task-panel.collapsed) .detail-panel {
-    grid-column: 2 !important;
-    grid-row: 2 !important;
 }
 
 /* Interactive Log Items */
