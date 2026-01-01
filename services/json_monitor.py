@@ -161,8 +161,27 @@ class JsonMonitor:
                 return f"[{timestamp}] 💬 {content}"
 
             case "assistant":
-                # Skip - too noisy
-                return None
+                # Extract text content from assistant messages
+                message = event.data.get("message", {})
+                content = message.get("content", [])
+
+                # Collect all text blocks
+                texts = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text:
+                            texts.append(text)
+
+                if not texts:
+                    return None
+
+                # Combine and truncate
+                combined = " ".join(texts)
+                if len(combined) > 300:
+                    combined = combined[:300] + "..."
+
+                return f"[{timestamp}] 💬 {combined}"
 
             case "user":
                 # Skip - too noisy
