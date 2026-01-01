@@ -611,27 +611,32 @@ h1 {
 
 .task-panel.collapsed .panel-header {
     flex-direction: column;
-    padding: 0;
+    padding: 0.5rem 0;
     margin-bottom: 0;
     border-bottom: none;
+    align-items: center;
 }
 
 .task-panel.collapsed .panel-header-content {
     width: 100%;
-    padding: 0.5rem 0;
+    padding: 0;
     justify-content: center;
+    align-items: center;
 }
 
-.task-panel.collapsed .panel-header-content > span {
+.task-panel.collapsed .panel-header-content > * {
     display: none;
 }
 
 .task-panel.collapsed .panel-toggle {
-    width: 40px;
-    height: 40px;
+    display: flex !important;
+    width: 36px;
+    height: 36px;
     margin: 0;
     padding: 0;
     border-radius: 50%;
+    align-items: center;
+    justify-content: center;
 }
 
 .task-panel.collapsed .filter-tabs {
@@ -640,50 +645,63 @@ h1 {
 
 /* Compact task list when collapsed */
 .task-panel.collapsed #task-list {
-    padding: 0.25rem;
+    padding: 0.5rem 0.25rem;
+}
+
+.task-panel.collapsed #task-list > p,
+.task-panel.collapsed #task-list > .loading,
+.task-panel.collapsed #task-list > .muted {
+    display: none;
+}
+
+.task-panel.collapsed #task-list-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 .task-panel.collapsed .task-item {
     padding: 0;
-    margin: 0.25rem 0;
-    min-height: 8px;
-    height: 8px;
-    border-radius: 4px;
+    margin: 0;
+    min-height: 6px;
+    height: 6px;
+    width: 100%;
+    border-radius: 3px;
     cursor: pointer;
     transition: all 0.2s ease;
     overflow: hidden;
+    border: none;
 }
 
 .task-panel.collapsed .task-item:hover {
-    height: 12px;
-    margin: 0.5rem 0;
+    height: 10px;
+    transform: scale(1.1);
 }
 
 .task-panel.collapsed .task-header,
 .task-panel.collapsed .task-meta {
-    display: none;
+    display: none !important;
 }
 
 /* Show only status color as indicator */
 .task-panel.collapsed .task-item {
-    background: var(--bg-secondary);
-    border-left: 40px solid var(--text-secondary);
+    background: var(--text-secondary);
 }
 
 .task-panel.collapsed .task-item.task-running {
-    border-left-color: var(--accent-blue);
+    background: var(--accent-blue);
 }
 
 .task-panel.collapsed .task-item.task-waiting {
-    border-left-color: var(--accent-yellow);
+    background: var(--accent-yellow);
 }
 
 .task-panel.collapsed .task-item.task-completed {
-    border-left-color: var(--accent-green);
+    background: var(--accent-green);
 }
 
 .task-panel.collapsed .task-item.task-failed {
-    border-left-color: var(--accent-red);
+    background: var(--accent-red);
 }
 
 /* Detail panel takes full remaining space when task panel is collapsed */
