@@ -106,7 +106,26 @@
         Fail
     </button>
     {% if task.permission_prompt %}
-    <div class="permission-prompt">{{ task.permission_prompt }}</div>
+    <div class="permission-box">
+        <div class="permission-prompt">
+            <strong>⚠️ Permission Required:</strong><br>
+            {{ task.permission_prompt }}
+        </div>
+        <div class="permission-actions">
+            <button class="btn btn-success"
+                    hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=true"
+                    hx-target="#task-detail"
+                    hx-swap="innerHTML">
+                ✓ Approve
+            </button>
+            <button class="btn btn-danger"
+                    hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=false"
+                    hx-target="#task-detail"
+                    hx-swap="innerHTML">
+                ✗ Deny
+            </button>
+        </div>
+    </div>
     {% endif %}
 
     {% elif task.status.value == 'completed' or task.status.value == 'failed' %}

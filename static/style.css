@@ -74,6 +74,31 @@ p, div, span, pre, code {
     overflow-wrap: break-word;
 }
 
+/* Permission request UI */
+.permission-box {
+    background: var(--accent-yellow);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+    border: 2px solid var(--accent-yellow);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.permission-prompt {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.permission-prompt strong {
+    color: var(--accent-yellow);
+    font-size: 1.1rem;
+}
+
+.permission-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
 header {
     display: flex;
     align-items: baseline;
