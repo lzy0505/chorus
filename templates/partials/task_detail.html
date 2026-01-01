@@ -129,12 +129,23 @@
 
 <!-- Live Output (for running tasks) - auto-refreshing -->
 {% if task.status.value in ['running', 'waiting'] %}
-<div class="output-section"
-     hx-get="/dashboard/tasks/{{ task.id }}/output"
-     hx-trigger="every 2s"
-     hx-swap="innerHTML">
+<div class="output-section">
     <div class="output-header">Live Output (JSON Events)</div>
-    <div class="output-content">
+    <div class="output-content" id="output-content-{{ task.id }}"
+         hx-get="/dashboard/tasks/{{ task.id }}/output"
+         hx-trigger="every 2s"
+         hx-swap="innerHTML"
+         hx-on::before-swap="
+            const el = event.target;
+            const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+            el.dataset.wasAtBottom = wasAtBottom;
+         "
+         hx-on::after-swap="
+            const el = event.target;
+            if (el.dataset.wasAtBottom === 'true') {
+                el.scrollTop = el.scrollHeight;
+            }
+         ">
         <pre>{{ task.last_output or 'Waiting for output...' }}</pre>
     </div>
 </div>
