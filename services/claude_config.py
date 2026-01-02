@@ -115,7 +115,8 @@ def get_default_permission_policy() -> Dict[str, Any]:
             "Write",
             "Grep",
             "Glob",
-            "LSP"
+            "LSP",
+            "Bash"
         ],
         "bash_patterns": {
             "allow": [
