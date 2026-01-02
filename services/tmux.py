@@ -290,32 +290,32 @@ class TmuxService:
         from services.claude_config import get_task_config_dir
         task_config_dir = get_task_config_dir(task_id)
 
-        env_vars = [f'CLAUDE_CONFIG_DIR="{task_config_dir}"']
+        # Set environment variables in the tmux session so they persist
+        # and are inherited by Claude and all its subprocesses (including permission handler)
+        _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CONFIG_DIR", str(task_config_dir)])
 
         # Set CHORUS_DB_PATH for permission handler script
         from config import get_config
         config = get_config()
         db_path = Path(config.database.url.replace("sqlite:///", ""))
-        env_vars.append(f'CHORUS_DB_PATH="{db_path}"')
+        if not db_path.is_absolute():
+            db_path = Path.cwd() / db_path
+        _run_tmux(["set-environment", "-t", session_id, "CHORUS_DB_PATH", str(db_path)])
 
         # Pass through OAuth token if set
         oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if oauth_token:
-            env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
-
-        env_prefix = " ".join(env_vars)
+            _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CODE_OAUTH_TOKEN", oauth_token])
 
         # Build Claude command with JSON output format
         # Note: --verbose is required when using -p with --output-format stream-json
         # Permissions are now handled by per-task PermissionRequest hooks
         if context_file and context_file.exists():
-            base_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
+            claude_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            base_cmd = "claude --output-format stream-json --verbose"
+            claude_cmd = "claude --output-format stream-json --verbose"
             logger.debug("Starting Claude (JSON) with per-task permission hooks")
-
-        claude_cmd = f"{env_prefix} {base_cmd}".strip() if env_prefix else base_cmd
 
         # Add resume flag if session ID provided
         if resume_session_id:
