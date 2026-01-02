@@ -27,6 +27,12 @@
         const form = e.target;
         const formData = new FormData(form);
 
+        // Show loading state
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        btn.textContent = 'Adding...';
+        btn.disabled = true;
+
         fetch('/dashboard/tasks', {
             method: 'POST',
             body: formData
@@ -35,35 +41,14 @@
             if (!response.ok) {
                 throw new Error('Network response was not ok');
             }
-            return response.text();
-        })
-        .then(html => {
-            // Try multiple ways to find the task list container
-            let taskList = document.getElementById('task-list');
-            if (!taskList) {
-                // Try finding by class or within task-panel
-                const taskPanel = document.querySelector('.task-panel');
-                taskList = taskPanel?.querySelector('[id*="task"]');
-            }
-
-            console.log('Task list element:', taskList);
-            console.log('HTML received:', html.substring(0, 100));
-
-            if (taskList) {
-                taskList.innerHTML = html;
-                htmx.process(taskList);
-                form.reset();
-                console.log('List updated successfully');
-            } else {
-                // Fallback: just reload the page to show the new task
-                console.log('Element not found, reloading page...');
-                window.location.reload();
-            }
+            // Task created successfully, reload to show it
+            window.location.reload();
         })
         .catch(error => {
             console.error('Error creating task:', error);
-            // On error, reload to show any changes
-            window.location.reload();
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert('Failed to create task. Please try again.');
         });
     }
     </script>
