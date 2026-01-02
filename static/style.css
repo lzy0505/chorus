@@ -611,8 +611,7 @@ h1 {
     border-radius: 4px;
     margin-bottom: 0.5rem;
     cursor: pointer;
-    /* Only transition hover effects, not all properties during refresh */
-    transition: background-color 0.2s ease, border-color 0.2s ease;
+    /* No transitions - prevents flashing during auto-refresh */
 }
 
 .json-event:hover {
@@ -670,7 +669,7 @@ h1 {
 .expand-icon {
     font-size: 0.7rem;
     color: var(--text-secondary);
-    transition: transform 0.2s ease;
+    /* No transition - prevents flashing during auto-refresh */
 }
 
 .json-event.expanded .expand-icon {
@@ -680,7 +679,7 @@ h1 {
 .event-full-data {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
+    /* No transition - prevents flashing during auto-refresh */
 }
 
 .json-event.expanded .event-full-data {
