@@ -38,21 +38,32 @@
             return response.text();
         })
         .then(html => {
-            const taskList = document.getElementById('task-list');
+            // Try multiple ways to find the task list container
+            let taskList = document.getElementById('task-list');
+            if (!taskList) {
+                // Try finding by class or within task-panel
+                const taskPanel = document.querySelector('.task-panel');
+                taskList = taskPanel?.querySelector('[id*="task"]');
+            }
+
             console.log('Task list element:', taskList);
             console.log('HTML received:', html.substring(0, 100));
+
             if (taskList) {
                 taskList.innerHTML = html;
-                // Tell htmx to process the new content
                 htmx.process(taskList);
                 form.reset();
                 console.log('List updated successfully');
             } else {
-                console.error('task-list element not found!');
+                // Fallback: just reload the page to show the new task
+                console.log('Element not found, reloading page...');
+                window.location.reload();
             }
         })
         .catch(error => {
             console.error('Error creating task:', error);
+            // On error, reload to show any changes
+            window.location.reload();
         });
     }
     </script>
