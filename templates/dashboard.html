@@ -31,15 +31,27 @@
             method: 'POST',
             body: formData
         })
-        .then(response => response.text())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.text();
+        })
         .then(html => {
             const taskList = document.getElementById('task-list');
+            console.log('Task list element:', taskList);
+            console.log('HTML received:', html.substring(0, 100));
             if (taskList) {
                 taskList.innerHTML = html;
                 form.reset();
+                console.log('List updated successfully');
+            } else {
+                console.error('task-list element not found!');
             }
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error creating task:', error);
+        });
     }
     </script>
 
