@@ -307,6 +307,32 @@
          hx-on::after-swap="
             const el = event.target;
 
+            // Restore expanded event states WITHOUT animation
+            if (el.dataset.expandedEvents) {
+                const expandedIndices = JSON.parse(el.dataset.expandedEvents);
+                const events = el.querySelectorAll('.json-event');
+
+                // Temporarily disable transitions
+                events.forEach(evt => {
+                    evt.style.transition = 'none';
+                });
+
+                // Restore expanded class
+                expandedIndices.forEach(index => {
+                    if (events[index]) {
+                        events[index].classList.add('expanded');
+                    }
+                });
+
+                // Force reflow to apply styles before re-enabling transitions
+                void el.offsetHeight;
+
+                // Re-enable transitions
+                events.forEach(evt => {
+                    evt.style.transition = '';
+                });
+            }
+
             // Restore scroll position
             if (el.dataset.wasAtBottom === 'true') {
                 // Auto-scroll to bottom if user was viewing latest
@@ -314,17 +340,6 @@
             } else if (el.dataset.savedScrollTop) {
                 // Preserve exact scroll position if user was viewing older events
                 el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
-            }
-
-            // Restore expanded event states
-            if (el.dataset.expandedEvents) {
-                const expandedIndices = JSON.parse(el.dataset.expandedEvents);
-                const events = el.querySelectorAll('.json-event');
-                expandedIndices.forEach(index => {
-                    if (events[index]) {
-                        events[index].classList.add('expanded');
-                    }
-                });
             }
          ">
         {% if task.last_output %}
