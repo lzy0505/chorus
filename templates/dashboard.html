@@ -76,7 +76,27 @@
                 <button class="tab" hx-get="/dashboard/tasks?status=completed" hx-target="#task-list" hx-swap="innerHTML">Completed</button>
             </div>
         </div>
-        <div id="task-list" hx-get="/dashboard/tasks" hx-trigger="load, sse:task_update" hx-swap="innerHTML">
+        <div id="task-list"
+             hx-get="/dashboard/tasks"
+             hx-trigger="load, sse:task_update"
+             hx-swap="innerHTML"
+             hx-on::after-swap="
+                const el = event.target;
+                const taskItems = el.querySelectorAll('.task-item');
+
+                // Temporarily disable animations
+                taskItems.forEach(item => {
+                    item.style.animation = 'none';
+                });
+
+                // Force reflow
+                void el.offsetHeight;
+
+                // Re-enable animations
+                taskItems.forEach(item => {
+                    item.style.animation = '';
+                });
+             ">
             <p class="loading">Loading tasks...</p>
         </div>
     </div>
