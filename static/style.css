@@ -99,6 +99,100 @@ p, div, span, pre, code {
     gap: 0.5rem;
 }
 
+/* Permission Policy Display */
+.permission-policy-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.permission-policy-header {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.permission-policy-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.policy-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.policy-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.policy-value {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.tool-badge {
+    display: inline-block;
+    background: var(--accent-blue);
+    color: var(--bg-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.pattern-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+}
+
+.pattern-type {
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-width: 4.5rem;
+}
+
+.pattern-type.allow {
+    color: var(--accent-green);
+}
+
+.pattern-type.deny {
+    color: var(--accent-red);
+}
+
+.pattern {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.auto-approve-yes {
+    color: var(--accent-green);
+    font-weight: 500;
+}
+
+.auto-approve-no {
+    color: var(--accent-yellow);
+    font-weight: 500;
+}
+
 header {
     display: flex;
     align-items: baseline;

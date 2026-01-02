@@ -51,6 +51,92 @@
     </div>
 </div>
 
+<!-- Permission Policy -->
+{% if task.permission_policy %}
+<div class="permission-policy-section">
+    <div class="permission-policy-header">
+        <span>🔒 Permission Policy</span>
+    </div>
+    <div class="permission-policy-content">
+        {% set policy = task.permission_policy | from_json %}
+
+        <!-- Allowed Tools -->
+        {% if policy.allowed_tools %}
+        <div class="policy-item">
+            <span class="policy-label">Allowed Tools:</span>
+            <div class="policy-value">
+                {% for tool in policy.allowed_tools %}
+                <span class="tool-badge">{{ tool }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- File Patterns -->
+        {% if policy.file_patterns %}
+        <div class="policy-item">
+            <span class="policy-label">File Access:</span>
+            <div class="policy-value">
+                {% if policy.file_patterns.allow %}
+                <div class="pattern-group">
+                    <span class="pattern-type allow">✓ Allow:</span>
+                    {% for pattern in policy.file_patterns.allow %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if policy.file_patterns.deny %}
+                <div class="pattern-group">
+                    <span class="pattern-type deny">✗ Deny:</span>
+                    {% for pattern in policy.file_patterns.deny %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Bash Patterns -->
+        {% if policy.bash_patterns %}
+        <div class="policy-item">
+            <span class="policy-label">Bash Commands:</span>
+            <div class="policy-value">
+                {% if policy.bash_patterns.allow %}
+                <div class="pattern-group">
+                    <span class="pattern-type allow">✓ Allow:</span>
+                    {% for pattern in policy.bash_patterns.allow %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if policy.bash_patterns.deny %}
+                <div class="pattern-group">
+                    <span class="pattern-type deny">✗ Deny:</span>
+                    {% for pattern in policy.bash_patterns.deny %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Auto-Approve Status -->
+        <div class="policy-item">
+            <span class="policy-label">Auto-Approve:</span>
+            <span class="policy-value">
+                {% if policy.auto_approve %}
+                <span class="auto-approve-yes">✓ Enabled</span>
+                {% else %}
+                <span class="auto-approve-no">✗ Disabled</span>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Prompt History (if any) -->
 {% if task.prompt_history %}
 <div class="prompt-history-section">
