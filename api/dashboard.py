@@ -193,7 +193,29 @@ async def get_task_output(
             elif event_type == 'assistant':
                 msg = event_data.get('message', {})
                 content = msg.get('content', [])
-                summary_html += f'Assistant response ({len(content)} blocks)'
+
+                # Extract text from content blocks
+                text_parts = []
+                tool_uses = []
+                for block in content:
+                    if block.get('type') == 'text':
+                        text_parts.append(block.get('text', ''))
+                    elif block.get('type') == 'tool_use':
+                        tool_uses.append(block.get('name', 'tool'))
+
+                # Combine text and show first ~200 chars (roughly 3 lines)
+                combined_text = ' '.join(text_parts)
+                if combined_text:
+                    preview = combined_text[:200]
+                    # Add line breaks for readability
+                    summary_html += f'<div style="white-space: pre-wrap; max-width: 600px;">{html.escape(preview)}{"..." if len(combined_text) > 200 else ""}</div>'
+
+                # Show tool uses if any
+                if tool_uses:
+                    summary_html += f'<div style="margin-top: 0.25rem;"><em>Uses: {", ".join(tool_uses)}</em></div>'
+
+                if not combined_text and not tool_uses:
+                    summary_html += f'Assistant response ({len(content)} blocks)'
             elif event_type == 'result':
                 usage = event_data.get('usage', {})
                 if usage:
