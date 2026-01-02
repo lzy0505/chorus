@@ -295,7 +295,7 @@ class TmuxService:
         # Set CHORUS_DB_PATH for permission handler script
         from config import get_config
         config = get_config()
-        db_path = Path(config.database_url.replace("sqlite:///", ""))
+        db_path = Path(config.database.url.replace("sqlite:///", ""))
         env_vars.append(f'CHORUS_DB_PATH="{db_path}"')
 
         # Pass through OAuth token if set

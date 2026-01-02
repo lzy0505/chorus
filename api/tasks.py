@@ -6,6 +6,7 @@ Tasks are the primary entity in Chorus. Each task:
 - Can have Claude restarted without losing context
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -320,7 +321,6 @@ async def start_task(
     task.last_output = f"[{timestamp}] 👤 You: {kickoff_message}"
 
     # Record initial prompt in history
-    import json
     prompts = [kickoff_message]
     task.prompt_history = json.dumps(prompts)
 
@@ -452,8 +452,6 @@ async def continue_task(
 
     The task must be running but Claude must be stopped.
     """
-    import json
-
     logger.info(f"Continuing task {task_id} with new prompt: {request.prompt[:50]}...")
     task = get_task_or_404(db, task_id)
 
