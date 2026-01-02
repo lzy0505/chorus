@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-02 17:41
+> Auto-updated by Claude Code. Last update: 2026-01-02 17:47
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -134,6 +134,11 @@
     - Comprehensive CSS styling for markdown elements
     - Note indicator when assistant message contains both text and tool_use blocks
     - Dependencies: `markdown` library with fenced_code and tables extensions
+  - **Preserved expanded state during auto-refresh**
+    - Auto-refresh (every 2s) now preserves which events are expanded
+    - Stores expanded event indices before swap
+    - Restores expanded class after swap
+    - Prevents user's viewing state from being reset
 
 ### Documentation Updates (2025-12-31)
 - ✅ Updated DESIGN.md with UUID-based architecture

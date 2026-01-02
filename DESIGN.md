@@ -829,8 +829,17 @@ class TtydService:
    - Monospace fonts for code
    - Proper spacing and padding for readability
 
+6. **State Preservation During Auto-Refresh:**
+   - Auto-refresh updates every 2 seconds to show new events
+   - Preserves which events are expanded during refresh
+   - Stores expanded event indices before DOM swap
+   - Restores expanded class after swap completes
+   - Prevents user's viewing state from being reset
+   - Also preserves scroll position (auto-scrolls if user was at bottom)
+
 **Implementation:**
 - `api/dashboard.py` - `get_task_output()` endpoint renders HTML from JSON events
+- `templates/partials/task_detail.html` - Auto-refresh with state preservation logic
 - `static/style.css` - Styles for `.json-event`, `.markdown-content`, event type badges
 - Uses `markdown` library with `fenced_code` and `tables` extensions
 

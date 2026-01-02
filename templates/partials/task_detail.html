@@ -288,11 +288,34 @@
             const el = event.target;
             const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
             el.dataset.wasAtBottom = wasAtBottom;
+
+            // Save expanded event indices
+            const expandedEvents = [];
+            const events = el.querySelectorAll('.json-event');
+            events.forEach((evt, index) => {
+                if (evt.classList.contains('expanded')) {
+                    expandedEvents.push(index);
+                }
+            });
+            el.dataset.expandedEvents = JSON.stringify(expandedEvents);
          "
          hx-on::after-swap="
             const el = event.target;
+
+            // Restore scroll position
             if (el.dataset.wasAtBottom === 'true') {
                 el.scrollTop = el.scrollHeight;
+            }
+
+            // Restore expanded event states
+            if (el.dataset.expandedEvents) {
+                const expandedIndices = JSON.parse(el.dataset.expandedEvents);
+                const events = el.querySelectorAll('.json-event');
+                expandedIndices.forEach(index => {
+                    if (events[index]) {
+                        events[index].classList.add('expanded');
+                    }
+                });
             }
          ">
         {% if task.last_output %}
