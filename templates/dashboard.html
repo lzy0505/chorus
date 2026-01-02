@@ -43,6 +43,8 @@
             console.log('HTML received:', html.substring(0, 100));
             if (taskList) {
                 taskList.innerHTML = html;
+                // Tell htmx to process the new content
+                htmx.process(taskList);
                 form.reset();
                 console.log('List updated successfully');
             } else {
