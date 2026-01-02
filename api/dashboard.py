@@ -69,7 +69,7 @@ async def create_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Create a task from form data and return task item HTML."""
+    """Create a task from form data and return full task list HTML."""
     import json
     from services.claude_config import get_permission_profile
 
@@ -94,8 +94,10 @@ async def create_task(
     db.commit()
     db.refresh(task)
 
+    # Return full task list
+    tasks = db.exec(select(Task).order_by(Task.priority.desc(), Task.created_at.desc())).all()
     return templates.TemplateResponse(
-        request, "partials/task_item.html", {"task": task}
+        request, "partials/task_list.html", {"tasks": tasks}
     )
 
 
