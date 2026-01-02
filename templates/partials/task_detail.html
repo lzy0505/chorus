@@ -304,7 +304,8 @@
             });
             el.dataset.expandedEvents = JSON.stringify(expandedEvents);
 
-            // Disable animations before swap
+            // Hide container during swap to prevent flashing
+            el.style.opacity = '0';
             el.classList.add('no-animate');
          "
          hx-on::after-swap="
@@ -329,8 +330,11 @@
                 el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
             }
 
-            // Force a reflow to apply all changes, then re-enable animations
+            // Force a reflow to apply all changes
             void el.offsetHeight;
+
+            // Show container and re-enable animations
+            el.style.opacity = '1';
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     el.classList.remove('no-animate');
