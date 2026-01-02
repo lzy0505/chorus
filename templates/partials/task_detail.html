@@ -9,6 +9,25 @@
      hx-target="#task-info-refresh"
      hx-select="#task-info-refresh"
      hx-swap="morph:outerHTML"
+     hx-on::after-swap="
+        const el = event.target;
+        const allElements = el.querySelectorAll('*');
+
+        // Temporarily disable all transitions and animations
+        allElements.forEach(elem => {
+            elem.style.transition = 'none';
+            elem.style.animation = 'none';
+        });
+
+        // Force reflow
+        void el.offsetHeight;
+
+        // Re-enable transitions and animations
+        allElements.forEach(elem => {
+            elem.style.transition = '';
+            elem.style.animation = '';
+        });
+     "
      {% endif %}>
 
 <div class="panel-header">
