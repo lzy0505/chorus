@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session, select
 
 from database import get_db
-from models import Task, TaskStatus, ClaudeStatus
+from models import Task, TaskStatus, ClaudeStatus, PermissionRequest, PermissionRequestStatus
 from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError, get_transcript_dir
 from services.gitbutler import GitButlerService, StackExistsError, GitButlerError
 from services.hooks import HooksService
@@ -789,4 +789,72 @@ async def get_task_output(
         "task_id": task_id,
         "output": output,
         "lines": lines,
+    }
+
+
+# Permission Request endpoints
+
+
+class PermissionDecision(BaseModel):
+    """Request body for permission decision."""
+    approved: bool
+
+
+@router.get("/{task_id}/permissions/pending")
+def get_pending_permissions(task_id: UUID, db: Session = Depends(get_db)):
+    """Get all pending permission requests for a task."""
+    statement = select(PermissionRequest).where(
+        PermissionRequest.task_id == task_id,
+        PermissionRequest.status == PermissionRequestStatus.pending
+    )
+    requests = db.exec(statement).all()
+
+    return [
+        {
+            "id": req.id,
+            "task_id": str(req.task_id),
+            "tool_name": req.tool_name,
+            "tool_input": json.loads(req.tool_input),
+            "created_at": req.created_at.isoformat(),
+        }
+        for req in requests
+    ]
+
+
+@router.post("/{task_id}/permissions/{permission_id}/decide")
+def decide_permission(
+    task_id: UUID,
+    permission_id: int,
+    decision: PermissionDecision,
+    db: Session = Depends(get_db)
+):
+    """Approve or deny a permission request."""
+    # Get the permission request
+    request = db.get(PermissionRequest, permission_id)
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Permission request not found")
+
+    if request.task_id != task_id:
+        raise HTTPException(status_code=400, detail="Permission request does not belong to this task")
+
+    if request.status != PermissionRequestStatus.pending:
+        raise HTTPException(status_code=400, detail="Permission request already decided")
+
+    # Update the request status
+    request.status = PermissionRequestStatus.approved if decision.approved else PermissionRequestStatus.denied
+    request.decided_at = datetime.now(timezone.utc)
+
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    logger.info(f"Permission request #{permission_id} for task {task_id} decided: {request.status}")
+
+    return {
+        "id": request.id,
+        "task_id": str(request.task_id),
+        "tool_name": request.tool_name,
+        "status": request.status,
+        "decided_at": request.decided_at.isoformat() if request.decided_at else None,
     }

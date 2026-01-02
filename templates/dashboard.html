@@ -111,5 +111,110 @@
         <div class="panel-header">Task Detail</div>
         <p class="muted">Select a task to view details</p>
     </div>
+
+    <!-- Permission Request Modal -->
+    <div id="permission-modal" class="permission-modal" style="display: none;">
+        <div class="permission-modal-content">
+            <h3>🔐 Permission Request</h3>
+            <div id="permission-details"></div>
+            <div class="permission-buttons">
+                <button class="btn btn-danger" onclick="denyPermission()">Deny</button>
+                <button class="btn btn-primary" onclick="approvePermission()">Approve</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Store current permission request
+    let currentPermissionRequest = null;
+
+    // Listen for permission_request SSE events
+    document.body.addEventListener('sse:permission_request', function(e) {
+        const data = JSON.parse(e.detail.data);
+        console.log('Permission request received:', data);
+
+        // Fetch full permission details
+        fetch(`/api/tasks/${data.task_id}/permissions/pending`)
+            .then(response => response.json())
+            .then(requests => {
+                if (requests.length > 0) {
+                    // Show the first pending request
+                    const request = requests[0];
+                    currentPermissionRequest = request;
+                    showPermissionModal(request);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching permission details:', error);
+            });
+    });
+
+    function showPermissionModal(request) {
+        const modal = document.getElementById('permission-modal');
+        const details = document.getElementById('permission-details');
+
+        // Format tool input for display
+        let inputDisplay = '';
+        if (request.tool_name === 'Write') {
+            inputDisplay = `<strong>File:</strong> ${request.tool_input.file_path}`;
+        } else if (request.tool_name === 'Bash') {
+            inputDisplay = `<strong>Command:</strong> <code>${request.tool_input.command}</code>`;
+        } else {
+            inputDisplay = `<pre>${JSON.stringify(request.tool_input, null, 2)}</pre>`;
+        }
+
+        details.innerHTML = `
+            <p><strong>Tool:</strong> ${request.tool_name}</p>
+            <p>${inputDisplay}</p>
+            <p class="muted">Created: ${new Date(request.created_at).toLocaleString()}</p>
+        `;
+
+        modal.style.display = 'flex';
+    }
+
+    function approvePermission() {
+        if (!currentPermissionRequest) return;
+
+        fetch(`/api/tasks/${currentPermissionRequest.task_id}/permissions/${currentPermissionRequest.id}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved: true })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Permission approved:', data);
+            hidePermissionModal();
+        })
+        .catch(error => {
+            console.error('Error approving permission:', error);
+            alert('Failed to approve permission');
+        });
+    }
+
+    function denyPermission() {
+        if (!currentPermissionRequest) return;
+
+        fetch(`/api/tasks/${currentPermissionRequest.task_id}/permissions/${currentPermissionRequest.id}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved: false })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Permission denied:', data);
+            hidePermissionModal();
+        })
+        .catch(error => {
+            console.error('Error denying permission:', error);
+            alert('Failed to deny permission');
+        });
+    }
+
+    function hidePermissionModal() {
+        const modal = document.getElementById('permission-modal');
+        modal.style.display = 'none';
+        currentPermissionRequest = null;
+    }
+    </script>
 </div>
 {% endblock %}

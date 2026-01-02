@@ -1321,3 +1321,71 @@ h1 {
         grid-template-columns: 1fr;
     }
 }
+
+/* Permission Request Modal */
+.permission-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.permission-modal-content {
+    background: var(--bg-primary);
+    border: 2px solid var(--accent-yellow);
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 600px;
+    min-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.permission-modal-content h3 {
+    margin: 0 0 1.5rem 0;
+    color: var(--accent-yellow);
+    font-size: 1.5rem;
+}
+
+.permission-modal-content #permission-details {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.permission-modal-content #permission-details p {
+    margin: 0.5rem 0;
+}
+
+.permission-modal-content #permission-details code {
+    background: var(--bg-tertiary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.permission-modal-content #permission-details pre {
+    background: var(--bg-tertiary);
+    padding: 0.75rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.875rem;
+}
+
+.permission-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.permission-buttons .btn {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}

@@ -101,3 +101,22 @@ class DocumentReference(SQLModel, table=True):
     end_line: int
     note: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PermissionRequestStatus(str, Enum):
+    """Permission request status."""
+    pending = "pending"      # Waiting for user decision
+    approved = "approved"    # User approved
+    denied = "denied"        # User denied
+    timeout = "timeout"      # Request timed out
+
+
+class PermissionRequest(SQLModel, table=True):
+    """A permission request from Claude that needs web UI approval."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: UUID = Field(foreign_key="task.id")
+    tool_name: str
+    tool_input: str  # JSON string of tool input parameters
+    status: PermissionRequestStatus = Field(default=PermissionRequestStatus.pending)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    decided_at: Optional[datetime] = Field(default=None)
