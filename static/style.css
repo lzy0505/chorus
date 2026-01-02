@@ -1000,6 +1000,13 @@ h1 {
     animation: fadeIn 0.3s ease;
 }
 
+/* Disable all animations during auto-refresh */
+.no-animate,
+.no-animate * {
+    animation: none !important;
+    transition: none !important;
+}
+
 .error {
     color: var(--accent-red);
 }

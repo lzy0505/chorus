@@ -80,23 +80,8 @@
              hx-get="/dashboard/tasks"
              hx-trigger="load, sse:task_update"
              hx-swap="innerHTML"
-             hx-on::after-swap="
-                const el = event.target;
-                const taskItems = el.querySelectorAll('.task-item');
-
-                // Temporarily disable animations
-                taskItems.forEach(item => {
-                    item.style.animation = 'none';
-                });
-
-                // Force reflow
-                void el.offsetHeight;
-
-                // Re-enable animations
-                taskItems.forEach(item => {
-                    item.style.animation = '';
-                });
-             ">
+             hx-on::before-swap="event.target.classList.add('no-animate')"
+             hx-on::after-swap="setTimeout(() => event.target.classList.remove('no-animate'), 50)">
             <p class="loading">Loading tasks...</p>
         </div>
     </div>

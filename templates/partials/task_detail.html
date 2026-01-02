@@ -3,31 +3,13 @@
 <!-- Auto-refresh wrapper for task info (excludes terminal) -->
 <div id="task-info-refresh"
      {% if task.status.value in ['running', 'waiting'] %}
-     hx-ext="morph"
      hx-get="/dashboard/tasks/{{ task.id }}"
      hx-trigger="every 3s"
      hx-target="#task-info-refresh"
      hx-select="#task-info-refresh"
-     hx-swap="morph:outerHTML"
-     hx-on::after-swap="
-        const el = event.target;
-        const allElements = el.querySelectorAll('*');
-
-        // Temporarily disable all transitions and animations
-        allElements.forEach(elem => {
-            elem.style.transition = 'none';
-            elem.style.animation = 'none';
-        });
-
-        // Force reflow
-        void el.offsetHeight;
-
-        // Re-enable transitions and animations
-        allElements.forEach(elem => {
-            elem.style.transition = '';
-            elem.style.animation = '';
-        });
-     "
+     hx-swap="outerHTML"
+     hx-on::before-swap="event.target.classList.add('no-animate')"
+     hx-on::after-swap="setTimeout(() => event.target.classList.remove('no-animate'), 50)"
      {% endif %}>
 
 <div class="panel-header">
@@ -299,10 +281,9 @@
 <div class="output-section">
     <div class="output-header">Live Output (JSON Events)</div>
     <div class="output-content json-events-container" id="output-content-{{ task.id }}"
-         hx-ext="morph"
          hx-get="/dashboard/tasks/{{ task.id }}/output"
          hx-trigger="every 2s"
-         hx-swap="morph settle:0ms"
+         hx-swap="innerHTML"
          hx-on::before-swap="
             const el = event.target;
             const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
@@ -322,44 +303,33 @@
                 }
             });
             el.dataset.expandedEvents = JSON.stringify(expandedEvents);
+
+            // Disable animations before swap
+            el.classList.add('no-animate');
          "
          hx-on::after-swap="
             const el = event.target;
 
-            // Restore expanded event states WITHOUT animation
+            // Restore expanded event states
             if (el.dataset.expandedEvents) {
                 const expandedIndices = JSON.parse(el.dataset.expandedEvents);
                 const events = el.querySelectorAll('.json-event');
-
-                // Temporarily disable transitions
-                events.forEach(evt => {
-                    evt.style.transition = 'none';
-                });
-
-                // Restore expanded class
                 expandedIndices.forEach(index => {
                     if (events[index]) {
                         events[index].classList.add('expanded');
                     }
                 });
-
-                // Force reflow to apply styles before re-enabling transitions
-                void el.offsetHeight;
-
-                // Re-enable transitions
-                events.forEach(evt => {
-                    evt.style.transition = '';
-                });
             }
 
             // Restore scroll position
             if (el.dataset.wasAtBottom === 'true') {
-                // Auto-scroll to bottom if user was viewing latest
                 el.scrollTop = el.scrollHeight;
             } else if (el.dataset.savedScrollTop) {
-                // Preserve exact scroll position if user was viewing older events
                 el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
             }
+
+            // Re-enable animations after a short delay
+            setTimeout(() => el.classList.remove('no-animate'), 50);
          ">
         {% if task.last_output %}
             {% set events = task.last_output.strip().split('\n') %}
