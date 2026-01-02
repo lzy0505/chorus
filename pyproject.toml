@@ -19,6 +19,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "aiosqlite>=0.20",
     "sse-starlette>=2.0",
+    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]

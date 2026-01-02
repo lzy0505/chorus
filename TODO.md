@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-02 17:04
+> Auto-updated by Claude Code. Last update: 2026-01-02 17:08
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -127,6 +127,13 @@
     - Hides redundant user events containing only tool results
     - Shows SUCCESS/ERROR badges and result preview (first 80 chars)
     - Expandable to show both tool_use and tool_result JSON blocks
+  - **Markdown rendering for text content**
+    - Text events render as formatted markdown in expanded view instead of raw JSON
+    - Assistant message text blocks render as markdown with proper formatting
+    - Supports: headings, bold/italic, code blocks, lists, tables, links, blockquotes
+    - Comprehensive CSS styling for markdown elements
+    - Note indicator when assistant message contains both text and tool_use blocks
+    - Dependencies: `markdown` library with fenced_code and tables extensions
 
 ### Documentation Updates (2025-12-31)
 - ✅ Updated DESIGN.md with UUID-based architecture

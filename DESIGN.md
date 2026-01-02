@@ -786,6 +786,60 @@ class TtydService:
 
 **Note:** ttyd is optional. If not installed, tasks still work but without web terminal access.
 
+### JSON Events Viewer
+
+**Purpose:** Provide a user-friendly interface for viewing and analyzing Claude Code's JSON event stream.
+
+**Location:** `/dashboard/tasks/{task_id}/output`
+
+**Features:**
+
+1. **Interactive Event Display**
+   - Collapsible event cards with expand/collapse animation
+   - Color-coded event type badges (system, assistant, tool_execution, result, error)
+   - Smart summaries showing essential info by default
+   - Click to expand and see full details
+
+2. **Event Types Rendered:**
+   - `system` - Session initialization details
+   - `assistant` - Claude's text responses with markdown rendering
+   - `tool_execution` - Paired tool_use + tool_result (combined view)
+   - `user` - User input (hidden when only containing tool_result)
+   - `result` - Session completion with token counts
+   - `error` - Error messages with type and details
+
+3. **Tool Pairing:**
+   - Automatically combines tool_use blocks from assistant messages with tool_result blocks from user messages
+   - Matches by ID (tool_use.id == tool_result.tool_use_id)
+   - Shows tool name, input (file path/command), success/error badge
+   - Displays result preview (first 80 chars)
+   - Expandable to show full JSON for both blocks
+   - Hides redundant user events that only contain tool_result
+
+4. **Markdown Rendering:**
+   - Text events show rendered markdown instead of raw JSON in expanded view
+   - Assistant message text blocks are extracted and rendered as markdown
+   - Supports: headings, bold/italic, inline code, code blocks (fenced), lists, tables, links, blockquotes
+   - Comprehensive CSS styling for all markdown elements
+   - Note indicator when assistant message contains both text and tool_use blocks
+
+5. **CSS Styling:**
+   - Dark theme with color-coded badges
+   - Smooth expand/collapse transitions (max-height animation)
+   - Monospace fonts for code
+   - Proper spacing and padding for readability
+
+**Implementation:**
+- `api/dashboard.py` - `get_task_output()` endpoint renders HTML from JSON events
+- `static/style.css` - Styles for `.json-event`, `.markdown-content`, event type badges
+- Uses `markdown` library with `fenced_code` and `tables` extensions
+
+**Benefits:**
+- No more raw JSON clutter - text content is beautifully formatted
+- Tool executions show clear input/output pairing
+- Easy to scan event stream with collapsible sections
+- Markdown content is properly formatted for readability
+
 ### Task Context Injection
 
 **Purpose:** Provide task-specific context to Claude Code without polluting the project directory.
