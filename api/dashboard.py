@@ -166,7 +166,7 @@ async def get_task_output(
                     paired_events.append(('tool_use', event, None))
             elif event_type == 'tool_result':
                 # Find matching tool_use
-                tool_use_id = event.data.get('toolUseId')
+                tool_use_id = event.data.get('tool_use_id')
                 if tool_use_id and tool_use_id in tool_use_map:
                     # Found a pair! Replace the tool_use entry with combined
                     idx, tool_use_event = tool_use_map[tool_use_id]
