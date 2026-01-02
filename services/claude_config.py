@@ -159,7 +159,7 @@ def get_default_permission_policy() -> Dict[str, Any]:
                 "credentials*",
             ]
         },
-        "auto_approve": True
+        "auto_approve": False  # Prompt for commands not explicitly allowed
     }
 
 
