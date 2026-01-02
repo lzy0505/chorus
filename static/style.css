@@ -643,6 +643,7 @@ h1 {
 .event-user .event-type { background: var(--accent-blue); }
 .event-tool_use .event-type { background: var(--accent-yellow); color: var(--bg-primary); }
 .event-tool_result .event-type { background: var(--accent-green); }
+.event-tool_execution .event-type { background: var(--accent-blue); font-weight: 700; }
 .event-text .event-type { background: var(--text-secondary); }
 .event-assistant .event-type { background: var(--accent-blue); }
 .event-result .event-type { background: var(--accent-green); }

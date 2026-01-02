@@ -151,10 +151,98 @@ async def get_task_output(
         if not events:
             return HTMLResponse('<div class="no-events">Waiting for output...</div>')
 
+        # Pair tool_use with tool_result events
+        paired_events = []
+        tool_use_map = {}  # id -> (index, event)
+
+        for i, event in enumerate(events):
+            event_type = event.data.get('type')
+
+            if event_type == 'tool_use':
+                # Store tool_use event with its index
+                tool_id = event.data.get('id')
+                if tool_id:
+                    tool_use_map[tool_id] = (i, event)
+                    paired_events.append(('tool_use', event, None))
+            elif event_type == 'tool_result':
+                # Find matching tool_use
+                tool_use_id = event.data.get('toolUseId')
+                if tool_use_id and tool_use_id in tool_use_map:
+                    # Found a pair! Replace the tool_use entry with combined
+                    idx, tool_use_event = tool_use_map[tool_use_id]
+                    # Find and replace in paired_events
+                    for j, (ptype, pevent, presult) in enumerate(paired_events):
+                        if ptype == 'tool_use' and pevent.data.get('id') == tool_use_id:
+                            paired_events[j] = ('tool_pair', tool_use_event, event)
+                            break
+                else:
+                    # Orphan tool_result
+                    paired_events.append(('tool_result', event, None))
+            else:
+                # Regular event
+                paired_events.append((event_type, event, None))
+
         # Render events using template
         html_output = ""
-        for event in events:
+        for event_tuple in paired_events:
+            event_type_tuple, event, result_event = event_tuple
             event_data = event.data
+
+            # Handle tool_pair specially
+            if event_type_tuple == 'tool_pair':
+                # Combined tool_use + tool_result
+                tool_name = event_data.get('toolName', 'Unknown')
+                tool_input = event_data.get('toolInput', {})
+                result_data = result_event.data
+                is_error = result_data.get('isError', False)
+                result_content = result_data.get('content', '')
+
+                # Build summary
+                summary_html = f'<span class="event-type">tool_execution</span>'
+                summary_html += '<span class="event-details">'
+                summary_html += f'<strong>{html.escape(tool_name)}</strong> '
+
+                # Show key input details
+                if 'file_path' in tool_input:
+                    summary_html += f'→ {html.escape(tool_input["file_path"])} '
+                elif 'command' in tool_input:
+                    cmd = tool_input['command'][:40]
+                    summary_html += f'→ <code>{html.escape(cmd)}...</code> '
+
+                # Show result status
+                if is_error:
+                    summary_html += '<span class="error-badge">ERROR</span>'
+                else:
+                    summary_html += '<span class="success-badge">SUCCESS</span>'
+
+                # Show brief result preview
+                if result_content:
+                    if isinstance(result_content, str):
+                        preview = result_content[:80]
+                        summary_html += f' <span style="color: var(--text-secondary); font-size: 0.8rem;">{html.escape(preview)}{"..." if len(result_content) > 80 else ""}</span>'
+
+                summary_html += '</span><span class="expand-icon">▶</span>'
+
+                # Full JSON data - combine both events
+                combined_json = {
+                    "tool_use": event_data,
+                    "tool_result": result_data
+                }
+                full_json = json.dumps(combined_json, indent=2)
+
+                html_output += f'''
+                <div class="json-event event-tool_execution" onclick="this.classList.toggle('expanded')">
+                    <div class="event-summary">
+                        {summary_html}
+                    </div>
+                    <div class="event-full-data">
+                        <pre>{html.escape(full_json)}</pre>
+                    </div>
+                </div>
+                '''
+                continue
+
+            # Regular event rendering
             event_type = event_data.get('type', 'unknown')
 
             # Build summary based on event type
