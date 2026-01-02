@@ -8,8 +8,8 @@
      hx-target="#task-info-refresh"
      hx-select="#task-info-refresh"
      hx-swap="outerHTML"
-     hx-on::before-swap="event.target.classList.add('no-animate')"
-     hx-on::after-swap="setTimeout(() => event.target.classList.remove('no-animate'), 50)"
+     hx-on::before-swap="event.target.parentElement.classList.add('no-animate')"
+     hx-on::after-swap="requestAnimationFrame(() => requestAnimationFrame(() => event.target.parentElement.classList.remove('no-animate')))"
      {% endif %}>
 
 <div class="panel-header">
@@ -328,8 +328,8 @@
                 el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
             }
 
-            // Re-enable animations after a short delay
-            setTimeout(() => el.classList.remove('no-animate'), 50);
+            // Re-enable animations after browser has painted
+            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('no-animate')));
          ">
         {% if task.last_output %}
             {% set events = task.last_output.strip().split('\n') %}
