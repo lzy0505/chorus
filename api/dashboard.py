@@ -257,27 +257,45 @@ async def get_task_output(
                 msg = event_data.get('message', {})
                 content = msg.get('content', [])
 
-                # Check for text and tool_use blocks
+                # Check for text, tool_use, and tool_result blocks
                 text_parts = []
                 tool_uses = []
+                tool_results = []
                 for block in content:
                     if isinstance(block, dict):
                         if block.get('type') == 'text':
                             text_parts.append(block.get('text', ''))
                         elif block.get('type') == 'tool_use':
                             tool_uses.append(block.get('name', 'tool'))
+                        elif block.get('type') == 'tool_result':
+                            tool_use_id = block.get('tool_use_id', 'unknown')
+                            is_error = block.get('is_error', False)
+                            tool_results.append((tool_use_id, is_error, block.get('content', '')))
 
-                # Show text preview
-                if text_parts:
-                    combined = ' '.join(text_parts)
-                    preview = combined[:100]
-                    summary_html += f'{html.escape(preview)}{"..." if len(combined) > 100 else ""}'
+                # If this is a tool_result message, render it specially
+                if tool_results and not text_parts:
+                    for tool_use_id, is_error, result_content in tool_results:
+                        if is_error:
+                            summary_html += '<span class="error-badge">TOOL ERROR</span> '
+                        else:
+                            summary_html += '<span class="success-badge">TOOL SUCCESS</span> '
+
+                        # Show brief preview
+                        if isinstance(result_content, str):
+                            preview = result_content[:80]
+                            summary_html += f'{html.escape(preview)}{"..." if len(result_content) > 80 else ""}'
                 else:
-                    summary_html += 'User input'
+                    # Show text preview
+                    if text_parts:
+                        combined = ' '.join(text_parts)
+                        preview = combined[:100]
+                        summary_html += f'{html.escape(preview)}{"..." if len(combined) > 100 else ""}'
+                    else:
+                        summary_html += 'User input'
 
-                # Indicate tool uses if present
-                if tool_uses:
-                    summary_html += f' <em style="color: var(--accent-yellow);">[Uses: {", ".join(tool_uses)}]</em>'
+                    # Indicate tool uses if present
+                    if tool_uses:
+                        summary_html += f' <em style="color: var(--accent-yellow);">[Uses: {", ".join(tool_uses)}]</em>'
             elif event_type == 'tool_use':
                 tool_name = event_data.get('toolName', 'Unknown')
                 tool_input = event_data.get('toolInput', {})
