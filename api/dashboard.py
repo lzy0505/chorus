@@ -402,12 +402,40 @@ async def get_task_output(
             summary_html += '</span>'
             summary_html += '<span class="expand-icon">▶</span>'
 
-            # Full data - special handling for text events
+            # Full data - special handling for text events and assistant messages with text content
             if event_type == 'text':
                 # For text events, render the text as markdown instead of JSON
                 text = event_data.get('text', '')
                 rendered_html = markdown.markdown(text, extensions=['fenced_code', 'tables'])
                 full_data_html = f'<div class="markdown-content">{rendered_html}</div>'
+            elif event_type == 'assistant':
+                # For assistant events, extract and render text content blocks as markdown
+                msg = event_data.get('message', {})
+                content = msg.get('content', [])
+
+                # Extract text blocks
+                text_blocks = []
+                has_tool_use = False
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'text':
+                            text_blocks.append(block.get('text', ''))
+                        elif block.get('type') == 'tool_use':
+                            has_tool_use = True
+
+                # If there's text content, render as markdown
+                if text_blocks:
+                    combined_text = '\n\n'.join(text_blocks)
+                    rendered_html = markdown.markdown(combined_text, extensions=['fenced_code', 'tables'])
+                    full_data_html = f'<div class="markdown-content">{rendered_html}</div>'
+
+                    # If there are also tool_use blocks, show a note about it
+                    if has_tool_use:
+                        full_data_html += '<div style="margin-top: 1rem; padding: 0.5rem; background: var(--bg-secondary); border-radius: 4px; font-size: 0.9rem; color: var(--text-secondary);">Note: This message also contains tool use blocks. See tool_execution events below for details.</div>'
+                else:
+                    # No text content, show full JSON
+                    full_json = json.dumps(event_data, indent=2)
+                    full_data_html = f'<pre>{html.escape(full_json)}</pre>'
             else:
                 # For other events, show full JSON
                 full_json = json.dumps(event_data, indent=2)
