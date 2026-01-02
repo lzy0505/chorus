@@ -149,19 +149,89 @@ async def get_task_output(
         events = parser.parse_output(raw_output)
 
         if not events:
-            output = "No JSON events parsed yet...\n\n--- RAW OUTPUT ---\n" + raw_output[:2000]
-        else:
-            formatted_events = []
-            for event in events:
-                # Pretty-print the entire event data
-                formatted = json.dumps(event.data, indent=2)
-                formatted_events.append(formatted)
-            output = "\n\n".join(formatted_events)
+            return HTMLResponse('<div class="no-events">Waiting for output...</div>')
+
+        # Render events using template
+        html_output = ""
+        for event in events:
+            event_data = event.data
+            event_type = event_data.get('type', 'unknown')
+
+            # Build summary based on event type
+            summary_html = f'<span class="event-type">{event_type}</span>'
+            summary_html += '<span class="event-details">'
+
+            if event_type == 'session_start':
+                session_id = event_data.get('session_id', 'N/A')
+                summary_html += f'Session: {session_id[:16] if session_id else "N/A"}...'
+            elif event_type == 'user':
+                msg = event_data.get('message', {})
+                content = msg.get('content', [])
+                if content and isinstance(content, list) and len(content) > 0:
+                    text = content[0].get('text', 'User input')[:60]
+                    summary_html += f'{html.escape(text)}...'
+                else:
+                    summary_html += 'User input'
+            elif event_type == 'tool_use':
+                tool_name = event_data.get('toolName', 'Unknown')
+                tool_input = event_data.get('toolInput', {})
+                summary_html += f'<strong>{html.escape(tool_name)}</strong> '
+                if 'file_path' in tool_input:
+                    summary_html += f'→ {html.escape(tool_input["file_path"])}'
+                elif 'command' in tool_input:
+                    cmd = tool_input['command'][:40]
+                    summary_html += f'→ <code>{html.escape(cmd)}...</code>'
+            elif event_type == 'tool_result':
+                is_error = event_data.get('isError', False)
+                if is_error:
+                    summary_html += '<span class="error-badge">ERROR</span>'
+                else:
+                    summary_html += '<span class="success-badge">SUCCESS</span>'
+            elif event_type == 'text':
+                text = event_data.get('text', '')[:60]
+                summary_html += f'{html.escape(text)}...'
+            elif event_type == 'assistant':
+                msg = event_data.get('message', {})
+                content = msg.get('content', [])
+                summary_html += f'Assistant response ({len(content)} blocks)'
+            elif event_type == 'result':
+                usage = event_data.get('usage', {})
+                if usage:
+                    inp = usage.get('input_tokens', 0)
+                    out = usage.get('output_tokens', 0)
+                    summary_html += f'Tokens: {inp}in / {out}out'
+                else:
+                    summary_html += 'Completed'
+            elif event_type == 'permission_request':
+                prompt = event_data.get('prompt', '')[:50]
+                summary_html += f'⚠️ {html.escape(prompt)}...'
+            elif event_type == 'error':
+                err = event_data.get('error', {})
+                err_type = err.get('type', 'unknown')
+                err_msg = err.get('message', '')[:40]
+                summary_html += f'<span class="error-badge">{html.escape(err_type)}</span> {html.escape(err_msg)}...'
+
+            summary_html += '</span>'
+            summary_html += '<span class="expand-icon">▶</span>'
+
+            # Full JSON data
+            full_json = json.dumps(event_data, indent=2)
+
+            html_output += f'''
+            <div class="json-event event-{event_type}" onclick="this.classList.toggle('expanded')">
+                <div class="event-summary">
+                    {summary_html}
+                </div>
+                <div class="event-full-data">
+                    <pre>{html.escape(full_json)}</pre>
+                </div>
+            </div>
+            '''
 
     except Exception as e:
-        output = f"Error: {str(e)}"
+        return HTMLResponse(f'<div class="no-events">Error: {html.escape(str(e))}</div>')
 
-    return HTMLResponse(f"<pre>{html.escape(output)}</pre>")
+    return HTMLResponse(html_output)
 
 
 @router.post("/tasks/{task_id}/send", response_class=HTMLResponse)
