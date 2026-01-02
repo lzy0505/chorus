@@ -978,10 +978,14 @@ h1 {
 }
 
 /* Smooth transitions */
-.task-item,
 .btn,
 .tab {
     transition: all 0.2s ease;
+}
+
+/* Task items only transition border on hover, not all properties */
+.task-item {
+    transition: border-color 0.2s;
 }
 
 /* Fade in animation for new tasks */
@@ -996,7 +1000,8 @@ h1 {
     }
 }
 
-.task-item {
+/* Only animate on initial load, not on auto-refresh */
+.task-item.new-task {
     animation: fadeIn 0.3s ease;
 }
 

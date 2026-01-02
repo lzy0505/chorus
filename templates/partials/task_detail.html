@@ -310,6 +310,7 @@
          hx-on::after-swap="
             const el = event.target;
 
+            // Keep no-animate active while we restore state
             // Restore expanded event states
             if (el.dataset.expandedEvents) {
                 const expandedIndices = JSON.parse(el.dataset.expandedEvents);
@@ -328,8 +329,13 @@
                 el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
             }
 
-            // Re-enable animations after browser has painted
-            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('no-animate')));
+            // Force a reflow to apply all changes, then re-enable animations
+            void el.offsetHeight;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    el.classList.remove('no-animate');
+                });
+            });
          ">
         {% if task.last_output %}
             {% set events = task.last_output.strip().split('\n') %}
