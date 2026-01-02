@@ -151,51 +151,91 @@ async def get_task_output(
         if not events:
             return HTMLResponse('<div class="no-events">Waiting for output...</div>')
 
-        # Pair tool_use with tool_result events
+        # Extract tool_use blocks from assistant messages and tool_result blocks from user messages
+        tool_use_blocks = {}  # tool_id -> (assistant_event, tool_use_block)
+        tool_result_blocks = {}  # tool_use_id -> (user_event, tool_result_block)
+
+        for event in events:
+            event_type = event.data.get('type')
+
+            # Extract tool_use blocks from assistant messages
+            if event_type == 'assistant':
+                msg = event.data.get('message', {})
+                content = msg.get('content', [])
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'tool_use':
+                        tool_id = block.get('id')
+                        if tool_id:
+                            tool_use_blocks[tool_id] = (event, block)
+
+            # Extract tool_result blocks from user messages
+            elif event_type == 'user':
+                msg = event.data.get('message', {})
+                content = msg.get('content', [])
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'tool_result':
+                        tool_use_id = block.get('tool_use_id')
+                        if tool_use_id:
+                            tool_result_blocks[tool_use_id] = (event, block)
+
+        # Create paired events
         paired_events = []
-        tool_use_map = {}  # id -> (index, event)
+        processed_user_events = set()  # Track which user events we've processed as tool results
 
         for i, event in enumerate(events):
             event_type = event.data.get('type')
 
-            if event_type == 'tool_use':
-                # Store tool_use event with its index
-                tool_id = event.data.get('id')
-                if tool_id:
-                    tool_use_map[tool_id] = (i, event)
-                    paired_events.append(('tool_use', event, None))
-            elif event_type == 'tool_result':
-                # Find matching tool_use
-                tool_use_id = event.data.get('tool_use_id')
-                if tool_use_id and tool_use_id in tool_use_map:
-                    # Found a pair! Replace the tool_use entry with combined
-                    idx, tool_use_event = tool_use_map[tool_use_id]
-                    # Find and replace in paired_events
-                    for j, (ptype, pevent, presult) in enumerate(paired_events):
-                        if ptype == 'tool_use' and pevent.data.get('id') == tool_use_id:
-                            paired_events[j] = ('tool_pair', tool_use_event, event)
-                            break
-                else:
-                    # Orphan tool_result
-                    paired_events.append(('tool_result', event, None))
+            # For assistant events, check if any tool_use blocks have matching results
+            if event_type == 'assistant':
+                msg = event.data.get('message', {})
+                content = msg.get('content', [])
+
+                # Separate tool_use blocks from other content
+                tool_uses_in_msg = []
+                has_other_content = False
+
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'tool_use':
+                            tool_uses_in_msg.append(block)
+                        else:
+                            has_other_content = True
+
+                # If this assistant message has tool_use blocks, create combined entries
+                for tool_use_block in tool_uses_in_msg:
+                    tool_id = tool_use_block.get('id')
+                    if tool_id and tool_id in tool_result_blocks:
+                        result_event, result_block = tool_result_blocks[tool_id]
+                        # Create a combined tool execution entry
+                        paired_events.append(('tool_pair', event, result_event, tool_use_block, result_block))
+                        processed_user_events.add(id(result_event))
+
+                # If assistant has other content besides tool_use, add it as regular event
+                if has_other_content or not tool_uses_in_msg:
+                    paired_events.append((event_type, event, None, None, None))
+
+            # For user events, only add if not already processed as a tool_result
+            elif event_type == 'user':
+                if id(event) not in processed_user_events:
+                    paired_events.append((event_type, event, None, None, None))
+
+            # All other events
             else:
-                # Regular event
-                paired_events.append((event_type, event, None))
+                paired_events.append((event_type, event, None, None, None))
 
         # Render events using template
         html_output = ""
         for event_tuple in paired_events:
-            event_type_tuple, event, result_event = event_tuple
+            event_type_tuple, event, result_event, tool_use_block, tool_result_block = event_tuple
             event_data = event.data
 
             # Handle tool_pair specially
             if event_type_tuple == 'tool_pair':
-                # Combined tool_use + tool_result
-                tool_name = event_data.get('toolName', 'Unknown')
-                tool_input = event_data.get('toolInput', {})
-                result_data = result_event.data
-                is_error = result_data.get('isError', False)
-                result_content = result_data.get('content', '')
+                # Combined tool_use + tool_result from message blocks
+                tool_name = tool_use_block.get('name', 'Unknown')
+                tool_input = tool_use_block.get('input', {})
+                is_error = tool_result_block.get('is_error', False)
+                result_content = tool_result_block.get('content', '')
 
                 # Build summary
                 summary_html = f'<span class="event-type">tool_execution</span>'
@@ -223,10 +263,10 @@ async def get_task_output(
 
                 summary_html += '</span><span class="expand-icon">▶</span>'
 
-                # Full JSON data - combine both events
+                # Full JSON data - combine both blocks
                 combined_json = {
-                    "tool_use": event_data,
-                    "tool_result": result_data
+                    "tool_use": tool_use_block,
+                    "tool_result": tool_result_block
                 }
                 full_json = json.dumps(combined_json, indent=2)
 

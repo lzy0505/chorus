@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-02 16:14
+> Auto-updated by Claude Code. Last update: 2026-01-02 16:25
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -59,7 +59,7 @@
 
 ## In Progress
 
-### Phase 8.3: Granular Status Tracking
+### Phase 8.4: Granular Status Tracking
 **Goal:** Show what Claude is actually doing from JSON events
 
 - [ ] Expand ClaudeStatus enum (thinking, reading, editing, running)
@@ -75,7 +75,7 @@
 - [ ] Add document reference UI
 - [ ] Context injection for tasks
 
-### Phase 8.4: Error vs Normal Termination
+### Phase 8.5: Error vs Normal Termination
 - [ ] Detect normal termination (result with stopReason: "end_turn")
 - [ ] Detect error termination (error events)
 - [ ] Detect user cancellation (no result event)
@@ -88,7 +88,7 @@
 
 ## Completed
 
-### Phase 8: Enhanced UX Features (2026-01-01)
+### Phase 8: Enhanced UX Features (2026-01-01 to 2026-01-02)
 - ✅ **8.1: Permission Configuration with PermissionRequest Hooks**
   - Implemented per-task permission policies using PermissionRequest hooks
   - Per-task Claude config isolation (`/tmp/chorus/config/task-{uuid}/.claude/`)
@@ -107,6 +107,26 @@
   - Prompt history displayed in numbered list
   - Session ID shown in info grid
   - Continuation count tracked and displayed
+- ✅ **8.3: JSON Events Viewer (2026-01-02)**
+  - Permission policy display in task detail view
+    - Shows allowed tools as color-coded badges
+    - Displays file/bash patterns with allow/deny rules
+    - Shows auto-approve status
+  - Interactive JSON events viewer in `/dashboard/tasks/{id}/output`
+    - Collapsible event cards with expand/collapse animation
+    - Event type badges with color coding (system, assistant, tool_execution, result, error)
+    - Smart event summaries showing essential info by default
+    - Full JSON data visible on expand
+  - Enhanced event display
+    - Assistant text events show full message content
+    - Tool executions show tool name, file path/command, and result preview
+    - Result events show token counts (input/output)
+  - **Tool pairing feature**
+    - Combines tool_use (from assistant messages) + tool_result (from user messages)
+    - Creates single tool_execution events by matching IDs
+    - Hides redundant user events containing only tool results
+    - Shows SUCCESS/ERROR badges and result preview (first 80 chars)
+    - Expandable to show both tool_use and tool_result JSON blocks
 
 ### Documentation Updates (2025-12-31)
 - ✅ Updated DESIGN.md with UUID-based architecture
