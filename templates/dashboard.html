@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="dashboard" hx-ext="sse,morph" sse-connect="/api/events">
+<div class="dashboard" hx-ext="sse" sse-connect="/api/events">
     <!-- New Task Form -->
     <div class="panel new-task-panel">
         <form method="POST" action="/dashboard/tasks" class="new-task-form" onsubmit="handleTaskSubmit(event)">
