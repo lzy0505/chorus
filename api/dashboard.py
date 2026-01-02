@@ -167,11 +167,28 @@ async def get_task_output(
             elif event_type == 'user':
                 msg = event_data.get('message', {})
                 content = msg.get('content', [])
-                if content and isinstance(content, list) and len(content) > 0:
-                    text = content[0].get('text', 'User input')[:60]
-                    summary_html += f'{html.escape(text)}...'
+
+                # Check for text and tool_use blocks
+                text_parts = []
+                tool_uses = []
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get('type') == 'text':
+                            text_parts.append(block.get('text', ''))
+                        elif block.get('type') == 'tool_use':
+                            tool_uses.append(block.get('name', 'tool'))
+
+                # Show text preview
+                if text_parts:
+                    combined = ' '.join(text_parts)
+                    preview = combined[:100]
+                    summary_html += f'{html.escape(preview)}{"..." if len(combined) > 100 else ""}'
                 else:
                     summary_html += 'User input'
+
+                # Indicate tool uses if present
+                if tool_uses:
+                    summary_html += f' <em style="color: var(--accent-yellow);">[Uses: {", ".join(tool_uses)}]</em>'
             elif event_type == 'tool_use':
                 tool_name = event_data.get('toolName', 'Unknown')
                 tool_input = event_data.get('toolInput', {})
@@ -188,8 +205,9 @@ async def get_task_output(
                 else:
                     summary_html += '<span class="success-badge">SUCCESS</span>'
             elif event_type == 'text':
-                text = event_data.get('text', '')[:60]
-                summary_html += f'{html.escape(text)}...'
+                text = event_data.get('text', '')
+                # Show all text for streaming assistant messages
+                summary_html += f'<div style="white-space: pre-wrap; max-width: 800px;">{html.escape(text)}</div>'
             elif event_type == 'assistant':
                 msg = event_data.get('message', {})
                 content = msg.get('content', [])
