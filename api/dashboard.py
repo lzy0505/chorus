@@ -6,6 +6,7 @@ These endpoints return HTML fragments for htmx to swap into the page.
 from typing import Optional
 from uuid import UUID
 
+import markdown
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -401,8 +402,16 @@ async def get_task_output(
             summary_html += '</span>'
             summary_html += '<span class="expand-icon">▶</span>'
 
-            # Full JSON data
-            full_json = json.dumps(event_data, indent=2)
+            # Full data - special handling for text events
+            if event_type == 'text':
+                # For text events, render the text as markdown instead of JSON
+                text = event_data.get('text', '')
+                rendered_html = markdown.markdown(text, extensions=['fenced_code', 'tables'])
+                full_data_html = f'<div class="markdown-content">{rendered_html}</div>'
+            else:
+                # For other events, show full JSON
+                full_json = json.dumps(event_data, indent=2)
+                full_data_html = f'<pre>{html.escape(full_json)}</pre>'
 
             html_output += f'''
             <div class="json-event event-{event_type}" onclick="this.classList.toggle('expanded')">
@@ -410,7 +419,7 @@ async def get_task_output(
                     {summary_html}
                 </div>
                 <div class="event-full-data">
-                    <pre>{html.escape(full_json)}</pre>
+                    {full_data_html}
                 </div>
             </div>
             '''
