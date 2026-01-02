@@ -4,7 +4,7 @@
 <div class="dashboard" hx-ext="sse,morph" sse-connect="/api/events">
     <!-- New Task Form -->
     <div class="panel new-task-panel">
-        <form hx-post="/dashboard/tasks" hx-target="#task-list" hx-swap="afterbegin" hx-on::after-request="this.reset(); htmx.ajax('GET', '/dashboard/tasks', {target: '#task-list', swap: 'morph'})" class="new-task-form">
+        <form hx-post="/dashboard/tasks" hx-swap="none" hx-on::after-request="if(event.detail.successful) { this.reset(); htmx.trigger('#task-list', 'load'); }" class="new-task-form">
             <input type="text" name="title" placeholder="Task title (e.g., 'Add user authentication')" class="task-input" required>
             <textarea name="description" placeholder="Task description (optional)" class="task-textarea" rows="2"></textarea>
             <div class="permission-profile-row">
