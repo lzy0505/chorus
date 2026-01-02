@@ -4,10 +4,7 @@
 <div class="dashboard" hx-ext="sse,morph" sse-connect="/api/events">
     <!-- New Task Form -->
     <div class="panel new-task-panel">
-        <form hx-post="/dashboard/tasks"
-              hx-target="#task-list"
-              hx-swap="innerHTML"
-              class="new-task-form">
+        <form method="POST" action="/dashboard/tasks" class="new-task-form" onsubmit="handleTaskSubmit(event)">
             <input type="text" name="title" placeholder="Task title (e.g., 'Add user authentication')" class="task-input" required>
             <textarea name="description" placeholder="Task description (optional)" class="task-textarea" rows="2"></textarea>
             <div class="permission-profile-row">
@@ -23,6 +20,28 @@
             <button type="submit" class="btn btn-primary">+ Add Task</button>
         </form>
     </div>
+
+    <script>
+    function handleTaskSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        fetch('/dashboard/tasks', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(html => {
+            const taskList = document.getElementById('task-list');
+            if (taskList) {
+                taskList.innerHTML = html;
+                form.reset();
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+    </script>
 
     <!-- Collapsed Sidebar (shown when task panel is collapsed) -->
     <div class="collapsed-sidebar" id="collapsed-sidebar" style="display: none;">
