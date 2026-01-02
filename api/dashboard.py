@@ -70,13 +70,26 @@ async def create_task(
     db: Session = Depends(get_db),
 ):
     """Create a task from form data and return task item HTML."""
+    import json
+    from services.claude_config import get_permission_profile
+
     form = await request.form()
     title = form.get("title", "").strip()
+    description = form.get("description", "").strip()
+    permission_profile = form.get("permission_profile", "full_dev")
 
     if not title:
         raise HTTPException(status_code=400, detail="Title is required")
 
-    task = Task(title=title)
+    # Convert permission profile to policy JSON string
+    policy_dict = get_permission_profile(permission_profile)
+    permission_policy = json.dumps(policy_dict)
+
+    task = Task(
+        title=title,
+        description=description,
+        permission_policy=permission_policy
+    )
     db.add(task)
     db.commit()
     db.refresh(task)
