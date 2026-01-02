@@ -243,7 +243,8 @@ async def get_task_output(
                 continue
 
             # Regular event rendering
-            event_type = event_data.get('type', 'unknown')
+            # For paired events, use tuple type; otherwise use data type
+            event_type = event_type_tuple if event_type_tuple in ['tool_use', 'tool_result'] else event_data.get('type', event_type_tuple)
 
             # Build summary based on event type
             summary_html = f'<span class="event-type">{event_type}</span>'
