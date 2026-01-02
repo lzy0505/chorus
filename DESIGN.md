@@ -836,6 +836,8 @@ class TtydService:
    - Restores expanded class after swap completes
    - Prevents user's viewing state from being reset
    - Also preserves scroll position (auto-scrolls if user was at bottom)
+   - Eliminates visual flashing by hiding container during swap (opacity: 0)
+   - CSS optimization: removed `transition: all` from elements to prevent animation during refresh
 
 **Implementation:**
 - `api/dashboard.py` - `get_task_output()` endpoint renders HTML from JSON events

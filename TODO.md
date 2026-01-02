@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-02 18:12
+> Auto-updated by Claude Code. Last update: 2026-01-02 18:16
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -139,6 +139,11 @@
     - Stores expanded event indices before swap
     - Restores expanded class after swap
     - Prevents user's viewing state from being reset
+  - **Eliminated auto-refresh flashing**
+    - Removed `transition: all` from `.task-item` and `.json-event` (only specific properties transition)
+    - Removed all transitions from `.expand-icon` and `.event-full-data`
+    - Hide container with `opacity: 0` during swap, show after state restoration
+    - Prevents visual blink during innerHTML replacement
 
 ### Documentation Updates (2025-12-31)
 - ✅ Updated DESIGN.md with UUID-based architecture
