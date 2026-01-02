@@ -611,7 +611,8 @@ h1 {
     border-radius: 4px;
     margin-bottom: 0.5rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    /* Only transition hover effects, not all properties during refresh */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .json-event:hover {
