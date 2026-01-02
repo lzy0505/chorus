@@ -279,7 +279,7 @@
 {% if task.status.value in ['running', 'waiting'] %}
 <div class="output-section">
     <div class="output-header">Live Output (JSON Events)</div>
-    <div class="output-content" id="output-content-{{ task.id }}"
+    <div class="output-content json-events-container" id="output-content-{{ task.id }}"
          hx-ext="morph"
          hx-get="/dashboard/tasks/{{ task.id }}/output"
          hx-trigger="every 2s"
@@ -295,7 +295,65 @@
                 el.scrollTop = el.scrollHeight;
             }
          ">
-        <pre>{{ task.last_output or 'Waiting for output...' }}</pre>
+        {% if task.last_output %}
+            {% set events = task.last_output.strip().split('\n') %}
+            {% for event_line in events %}
+                {% if event_line.strip().startswith('{') %}
+                    {% set event = event_line | from_json %}
+                    <div class="json-event event-{{ event.type }}" onclick="this.classList.toggle('expanded')">
+                        <div class="event-summary">
+                            <span class="event-type">{{ event.type }}</span>
+                            <span class="event-details">
+                                {% if event.type == 'session_start' %}
+                                    Session: {{ event.session_id[:16] if event.session_id else 'N/A' }}...
+                                {% elif event.type == 'user' %}
+                                    {% if event.message.content is iterable and event.message.content is not string %}
+                                        {{ event.message.content[0].text[:60] if event.message.content and event.message.content[0].text else 'User input' }}...
+                                    {% else %}
+                                        User input
+                                    {% endif %}
+                                {% elif event.type == 'tool_use' %}
+                                    <strong>{{ event.toolName }}</strong>
+                                    {% if event.toolInput.file_path %}
+                                        → {{ event.toolInput.file_path }}
+                                    {% elif event.toolInput.command %}
+                                        → <code>{{ event.toolInput.command[:40] }}...</code>
+                                    {% endif %}
+                                {% elif event.type == 'tool_result' %}
+                                    {% if event.isError %}
+                                        <span class="error-badge">ERROR</span>
+                                    {% else %}
+                                        <span class="success-badge">SUCCESS</span>
+                                    {% endif %}
+                                {% elif event.type == 'text' %}
+                                    {{ event.text[:60] if event.text else '' }}...
+                                {% elif event.type == 'assistant' %}
+                                    Assistant response ({{ event.message.content | length }} blocks)
+                                {% elif event.type == 'result' %}
+                                    {% if event.usage %}
+                                        Tokens: {{ event.usage.input_tokens }}in / {{ event.usage.output_tokens }}out
+                                    {% else %}
+                                        Completed
+                                    {% endif %}
+                                {% elif event.type == 'permission_request' %}
+                                    ⚠️ {{ event.prompt[:50] }}...
+                                {% elif event.type == 'error' %}
+                                    <span class="error-badge">{{ event.error.type }}</span> {{ event.error.message[:40] }}...
+                                {% else %}
+                                    {{ event.type }}
+                                {% endif %}
+                            </span>
+                            <span class="expand-icon">▶</span>
+                        </div>
+                        <div class="event-full-data">
+                            <pre>{{ event | tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <div class="no-events">Waiting for output...</div>
+        {% endif %}
     </div>
 </div>
 {% endif %}
