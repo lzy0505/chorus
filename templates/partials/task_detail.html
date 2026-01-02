@@ -289,6 +289,11 @@
             const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
             el.dataset.wasAtBottom = wasAtBottom;
 
+            // Save current scroll position for non-bottom cases
+            if (!wasAtBottom) {
+                el.dataset.savedScrollTop = el.scrollTop.toString();
+            }
+
             // Save expanded event indices
             const expandedEvents = [];
             const events = el.querySelectorAll('.json-event');
@@ -304,7 +309,11 @@
 
             // Restore scroll position
             if (el.dataset.wasAtBottom === 'true') {
+                // Auto-scroll to bottom if user was viewing latest
                 el.scrollTop = el.scrollHeight;
+            } else if (el.dataset.savedScrollTop) {
+                // Preserve exact scroll position if user was viewing older events
+                el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
             }
 
             // Restore expanded event states
