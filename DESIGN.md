@@ -650,28 +650,13 @@ url = "sqlite:///orchestrator.db"
 session_prefix = "claude"
 poll_interval = 1.0
 
-[editor]
-command = "vim"
-
-[documents]
-patterns = [
-    "*.md",
-    "docs/**/*.md",
-    ".claude/**/*.md",
-]
-
 [logging]
-level = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-log_subprocess = true  # Log external tool invocations (tmux, GitButler CLI, ttyd)
-log_api_requests = true  # Log API endpoint calls
+level = "INFO"  # DEBUG for troubleshooting
+log_subprocess = true
+log_api_requests = true
 
-[status_polling]
-enabled = true
-interval = 5.0           # Poll every 5 seconds to verify status
-frozen_threshold = 300.0 # Warn if Claude busy > 5 minutes
-
-[notifications]
-enabled = true
+[monitoring]
+use_json_mode = true  # Recommended (vs legacy hook mode)
 
 [status.idle]
 patterns = ['>\\s*$', 'claude>\\s*$']
@@ -680,95 +665,67 @@ patterns = ['>\\s*$', 'claude>\\s*$']
 patterns = ['\\(y/n\\)', 'Allow\\?', 'Continue\\?']
 ```
 
-### Logging Configuration
-
-Chorus provides comprehensive logging for debugging, particularly useful when troubleshooting external tool interactions:
-
-**Log Levels** (`logging.level`):
-- `DEBUG`: Detailed information for diagnosing problems, includes all subprocess commands with full output
-- `INFO`: General informational messages (default)
-- `WARNING`: Warning messages for unexpected but handled situations
-- `ERROR`: Error messages for failures
-- `CRITICAL`: Critical failures
-
-**Subprocess Logging** (`logging.log_subprocess`):
-When enabled, logs all external tool invocations with:
-- Complete command line
-- Exit codes
-- stdout/stderr output (truncated for readability)
-- Execution timing
-
-Tools logged:
-- `tmux` commands (session management, input/output)
-- `but` GitButler CLI commands (stack operations, commits)
-- `ttyd` process management (web terminal)
-
-**API Request Logging** (`logging.log_api_requests`):
-When enabled, logs all HTTP requests with:
-- HTTP method and path
-- Response status codes
-- Error details
-
-**Debugging Example:**
-
-To debug tmux or GitButler issues:
-```toml
-[logging]
-level = "DEBUG"
-log_subprocess = true
-log_api_requests = false
-```
-
-This will show detailed command execution:
-```
-2025-12-30 10:15:23 - services.tmux - DEBUG - Executing: tmux new-session -d -s claude-task-1 -c /path/to/project
-2025-12-30 10:15:23 - services.tmux - DEBUG - Command succeeded: tmux new-session -d -s claude-task-1 -c /path/to/project
-2025-12-30 10:15:24 - services.gitbutler - INFO - Creating GitButler stack: task-1-feature
-2025-12-30 10:15:24 - services.gitbutler - DEBUG - Executing: but branch new task-1-feature -j
-2025-12-30 10:15:24 - services.gitbutler - DEBUG - Command succeeded: but branch new task-1-feature -j
-```
-
-### Environment Variables
-
-**CLAUDE_CODE_OAUTH_TOKEN** — Required for spawned Claude sessions to authenticate without interactive login. Generate with `claude setup-token`. See [Spawned Session Authentication](#spawned-session-authentication) for details.
-
-```bash
-export CLAUDE_CODE_OAUTH_TOKEN=<token-from-setup-token>
-```
+**See `README.md` for complete configuration reference.**
 
 ---
 
-## Quick Start
+## Key Documentation
 
-```bash
-# Start the orchestrator
-cd chorus
-uv run python main.py
-
-# Open dashboard
-open http://localhost:8000
-
-# Workflow:
-# 1. Create a task with description
-# 2. Add document references for context
-# 3. Start task (creates branch, launches Claude)
-# 4. Monitor progress, approve permissions
-# 5. Restart Claude if it hangs
-# 6. Complete task (commits via GitButler)
-```
+| File | Content |
+|------|---------|
+| `CLAUDE.md` | Development guide, GitButler workflow, project structure |
+| `TODO.md` | Current tasks and upcoming work |
+| `PLAN.md` | Implementation phases, current status |
+| `README.md` | Quick start, features, configuration |
+| `docs/JSON_EVENTS.md` | Claude Code JSON event format (10 event types) |
+| `docs/TERMINATION_HANDLING.md` | Process termination, `-p` flag behavior |
+| `docs/PERMISSION_HANDLING.md` | Permission configuration strategies |
+| `docs/STATUS_TRACKING.md` | Granular status tracking design |
 
 ---
 
-## Glossary
+## Terminology
 
 | Term | Definition |
 |------|------------|
 | **Task** | A unit of work with its own tmux process and GitButler stack |
 | **tmux process** | Terminal session that persists for task lifetime |
 | **Claude session** | Ephemeral Claude Code instance within tmux (can be restarted) |
-| **GitButler stack** | Virtual branch managed by GitButler for task changes (multiple can run in parallel) |
-| **Stack CLI ID** | Short identifier (e.g., `tm`, `zl`) used by `but` commands to reference a stack |
-| **Document** | A tracked markdown file providing context |
-| **Reference** | A link from a task to specific lines in a document |
-| **Permission Prompt** | When Claude asks for confirmation (y/n) |
-| **`but`** | GitButler CLI command (e.g., `but status`, `but commit`) |
+| **GitButler stack** | Virtual branch managed by GitButler for task changes |
+| **Stack CLI ID** | Short identifier (e.g., `u0`) used by `but` commands |
+| **Claude Code hooks** | DEPRECATED - SessionStart/ToolUse callbacks, replaced by JSON monitoring |
+| **GitButler hooks** | `but claude pre-tool/post-tool/stop` - for stack isolation |
+| **JSON events** | Structured output from `--output-format stream-json` |
+| **Session resumption** | Continue Claude session with `--resume {session_id}` |
+
+---
+
+## Important Notes
+
+### Two "Hooks" Systems
+
+Chorus documentation references two different "hooks" systems:
+
+| System | Purpose | Status |
+|--------|---------|--------|
+| **Claude Code hooks** | Monitor Claude sessions via callbacks (SessionStart, ToolUse) | DEPRECATED - replaced by JSON monitoring |
+| **GitButler hooks** | CLI commands for stack isolation (`but claude pre-tool/post-tool/stop`) | IN USE |
+
+**Current Architecture:**
+- Monitoring: JSON-based (reads `stream-json` output)
+- GitButler: CLI hooks for session-isolated stacks
+
+### Authentication for Spawned Sessions
+
+Claude Code's OAuth subscription authentication doesn't automatically propagate to isolated sessions. Users must:
+
+1. Generate long-lived OAuth token: `claude setup-token`
+2. Set environment variable: `export CLAUDE_CODE_OAUTH_TOKEN="<token>"`
+
+Chorus passes this token to spawned Claude sessions via environment variables.
+
+**See README.md for setup instructions.**
+
+---
+
+**For detailed implementation history and architectural decisions, see `PLAN.md`.**
