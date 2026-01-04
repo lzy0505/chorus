@@ -306,22 +306,22 @@ class TmuxService:
         if oauth_token:
             _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CODE_OAUTH_TOKEN", oauth_token])
 
-        # Build Claude command with JSON output format
-        # Use interactive mode (not -p) so standard file tools are available
+        # Build Claude command with JSON output format in non-interactive mode
+        # Note: Do NOT use --permission-mode delegate as it removes standard tools when MCP servers are present
         # Explicitly export environment variables in the command (tmux set-environment doesn't auto-export)
         env_prefix = f'CHORUS_TASK_ID="{task_id}" CHORUS_DB_PATH="{db_path}"'
         if oauth_token:
             env_prefix += f' CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"'
 
         if context_file and context_file.exists():
-            claude_cmd = '{env_prefix} claude --permission-mode delegate --append-system-prompt "$(cat {context_file})" --output-format stream-json'.format(
+            claude_cmd = '{env_prefix} claude -p "" --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(
                 env_prefix=env_prefix,
                 context_file=context_file
             )
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            claude_cmd = f'{env_prefix} claude --permission-mode delegate --output-format stream-json'
-            logger.debug("Starting Claude in interactive mode with JSON output")
+            claude_cmd = f'{env_prefix} claude -p "" --output-format stream-json --verbose'
+            logger.debug("Starting Claude (JSON) in -p mode")
 
         # Add resume flag if session ID provided
         if resume_session_id:
@@ -334,18 +334,15 @@ class TmuxService:
             claude_cmd += f' --allowedTools "{escaped_tools}"'
             logger.debug(f"Setting allowed tools: {allowed_tools}")
 
-        # Send the claude command to start interactive session
+        # If there's an initial prompt, replace the empty prompt
+        if initial_prompt:
+            escaped_prompt = initial_prompt.replace('"', '\\"')
+            claude_cmd = claude_cmd.replace('-p ""', f'-p "{escaped_prompt}"', 1)
+            logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
+
+        # Send the claude command
         _run_tmux(["send-keys", "-t", session_id, claude_cmd, "Enter"])
         logger.info(f"Claude Code (JSON mode) started for task {task_id}")
-
-        # If there's an initial prompt, send it after Claude starts
-        if initial_prompt:
-            import time
-            time.sleep(2)  # Wait for Claude to initialize
-            # Escape for tmux send-keys
-            escaped_prompt = initial_prompt.replace("'", "'\\''")
-            _run_tmux(["send-keys", "-t", session_id, f"{escaped_prompt}", "Enter"])
-            logger.debug(f"Sent initial prompt: {initial_prompt[:100]}...")
 
     def restart_claude(
         self,
