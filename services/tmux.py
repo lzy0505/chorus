@@ -309,12 +309,12 @@ class TmuxService:
 
         # Build Claude command with JSON output format
         # Note: --verbose is required when using -p with --output-format stream-json
-        # Permissions are now handled by per-task PermissionRequest hooks
+        # Use -p flag to enable permission prompts (handled by PermissionRequest hooks)
         if context_file and context_file.exists():
-            claude_cmd = 'claude --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
+            claude_cmd = 'claude -p --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            claude_cmd = "claude --output-format stream-json --verbose"
+            claude_cmd = "claude -p --output-format stream-json --verbose"
             logger.debug("Starting Claude (JSON) with per-task permission hooks")
 
         # Add resume flag if session ID provided
@@ -322,10 +322,12 @@ class TmuxService:
             claude_cmd += f" --resume {resume_session_id}"
             logger.debug(f"Resuming Claude session: {resume_session_id}")
 
-        # If there's an initial prompt, pass it using -p flag
+        # If there's an initial prompt, append it to the -p flag
         if initial_prompt:
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            claude_cmd += f' -p "{escaped_prompt}"'
+            # Remove -p from claude_cmd if it's already there and add it with the prompt
+            claude_cmd = claude_cmd.replace(" -p ", " ")
+            claude_cmd = claude_cmd.replace("claude ", f'claude -p "{escaped_prompt}" ', 1)
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
