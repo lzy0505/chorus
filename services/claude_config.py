@@ -106,7 +106,7 @@ def ensure_global_permission_hook() -> None:
     """Ensure the PermissionRequest hook is registered in global Claude config.
 
     This registers the Chorus permission handler in ~/.claude/settings.json
-    so all Claude sessions can use the web UI permission system.
+    using the NEW flat array format required by Claude Code v2.0.37+.
     """
     global_settings_file = Path.home() / ".claude" / "settings.json"
 
@@ -118,39 +118,37 @@ def ensure_global_permission_hook() -> None:
         global_settings_file.parent.mkdir(parents=True, exist_ok=True)
         settings = {}
 
-    # Add PermissionRequest hook if not already present
+    # Ensure hooks is an ARRAY (new format), not a dict (old format)
     if "hooks" not in settings:
-        settings["hooks"] = {}
+        settings["hooks"] = []
+    elif isinstance(settings["hooks"], dict):
+        # Convert old nested format to new flat array format
+        logger.warning("Converting old hook format to new flat array format")
+        settings["hooks"] = []
 
+    # New format: flat array with event property
     hook_config = {
+        "event": "PermissionRequest",
         "matcher": "*",
-        "hooks": [
-            {
-                "type": "command",
-                "command": "/tmp/chorus/hooks/permission-handler.py",
-                "timeout": 300
-            }
-        ]
+        "command": "/tmp/chorus/hooks/permission-handler.py",
+        "timeout": 300
     }
 
     # Check if hook already exists
-    existing_hooks = settings["hooks"].get("PermissionRequest", [])
     hook_exists = any(
-        h.get("hooks", [{}])[0].get("command") == "/tmp/chorus/hooks/permission-handler.py"
-        for h in existing_hooks
-        if h.get("hooks")
+        h.get("event") == "PermissionRequest" and
+        h.get("command") == "/tmp/chorus/hooks/permission-handler.py"
+        for h in settings["hooks"]
     )
 
     if not hook_exists:
-        if "PermissionRequest" not in settings["hooks"]:
-            settings["hooks"]["PermissionRequest"] = []
-        settings["hooks"]["PermissionRequest"].append(hook_config)
+        settings["hooks"].append(hook_config)
 
         # Write updated settings
         with open(global_settings_file, "w") as f:
             json.dump(settings, f, indent=2)
 
-        logger.info("Registered Chorus permission hook in global Claude config")
+        logger.info("Registered Chorus permission hook in global Claude config (new format)")
     else:
         logger.debug("Chorus permission hook already registered globally")
 
