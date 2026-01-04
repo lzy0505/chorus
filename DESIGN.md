@@ -12,91 +12,76 @@ Task = tmux process + GitButler stack + ephemeral Claude sessions
 
 - **Task** is the primary entity — represents a unit of work
 - **tmux process** persists for the task's lifetime — provides isolation
-- **Claude sessions** are ephemeral — can be restarted within the same tmux when they hang, lose focus, or need fresh context
-- **GitButler stack** (virtual branch) tracks all changes — GitButler auto-commits via its native hooks
+- **Claude sessions** are ephemeral — can be restarted within the same tmux
+- **GitButler stack** (virtual branch) tracks all changes — GitButler auto-commits via native hooks
 
 ### Goals
 
 1. **Task Management**: Create, prioritize, and manage tasks with contextual information
 2. **Session Resilience**: Restart Claude sessions without losing task context
-3. **Git Integration**: Each task = one GitButler branch, auto-commit on completion
-4. **Real-time Monitoring**: Web dashboard with live status updates
+3. **Git Integration**: Each task = one GitButler stack, auto-commit via hooks
+4. **Real-time Monitoring**: Web dashboard with live status updates via JSON events
 5. **Document Management**: Reference markdown files as task context
-
-### Non-Goals
-
-- Multi-project support (targets single large project)
-- Complex role-based permissions (single user system)
-- Authentication (local use only)
 
 ---
 
 ## Architecture
 
-### System Diagram
+### High-Level Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Web Dashboard                                   │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌───────────────────────────────┐│
-│  │     Tasks       │  │   Documents     │  │     Alerts / Actions          ││
-│  │                 │  │                 │  │                               ││
-│  │ • Status        │  │ • Tree view     │  │ • Permission prompts          ││
-│  │ • Stack info    │  │ • References    │  │ • Restart Claude button       ││
-│  │ • Restart Claude│  │ • Line select   │  │ • Complete task button        ││
-│  │ • Complete task │  │                 │  │                               ││
-│  └─────────────────┘  └─────────────────┘  └───────────────────────────────┘│
-│                         htmx + SSE (live updates)                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            FastAPI Backend                                   │
-│                                                                             │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
-│  │    Task API     │  │  Document API   │  │    GitButler Service        │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘ │
-│                                                                             │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                        SSE Event Stream                               │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-          │                   │                        │
-          ▼                   ▼                        ▼
-┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────────┐
-│   Task Monitor   │  │     SQLite       │  │     Document Manager         │
-│  (async polling) │  │    Database      │  │    (filesystem ops)          │
-└──────────────────┘  └──────────────────┘  └──────────────────────────────┘
-          │                                            │
-          ▼                                            ▼
-┌──────────────────┐                        ┌──────────────────────────────┐
-│  Desktop Notify  │                        │      Project Filesystem      │
-└──────────────────┘                        │      (markdown files)        │
-          │                                 └──────────────────────────────┘
-          ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          tmux Processes (one per task)                    │
-│                                                                          │
-│  [task-1]                 [task-2]                [task-3]               │
-│  stack: task-1-auth       stack: task-2-api       stack: task-3-tests    │
-│  claude: running          claude: waiting         claude: stopped        │
-│  restarts: 0              restarts: 2             restarts: 1            │
-└──────────────────────────────────────────────────────────────────────────┘
+User creates task → Start task (spawn tmux + Claude) → JSON Monitor polls events →
+→ Detect file edits → Call GitButler hooks → Auto-create/commit to stack →
+→ Real-time UI updates via SSE → Task completion
 ```
 
-### Component Responsibilities
+### Key Components
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Web Dashboard** | UI for managing tasks, viewing documents, handling permissions |
 | **FastAPI Backend** | REST API + SSE; coordinates all components |
-| **JSON Monitor** | Parse JSON events from Claude (`--output-format stream-json`), detect status, trigger GitButler commits |
+| **JSON Monitor** | Parse JSON events from Claude (`--output-format stream-json`), detect status, trigger GitButler hooks |
 | **JSON Parser** | Parse `stream-json` format, extract events and session metadata |
-| **Document Manager** | Markdown file operations, outline parsing |
-| **GitButler Service** | Create/manage stacks via `but` CLI, monitor stack status |
-| **Desktop Notifier** | OS-native notifications for permission requests |
-| **tmux** | Process isolation per task, capture JSON output |
-| **ttyd Service** | Web terminal access via iframe (optional) |
+| **GitButler Service** | Call `but claude` hooks for stack isolation, commit changes |
+| **tmux Service** | Process isolation per task, capture JSON output |
+| **Web Dashboard** | UI for managing tasks, viewing documents, handling permissions |
+
+### JSON-Based Monitoring (Current Architecture)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ services/tmux.py                                             │
+│ └─ start_claude() → `claude --output-format stream-json`    │
+│ └─ capture_json_events() → Capture JSON from tmux           │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ services/json_monitor.py (JSON Monitor)                     │
+│ └─ poll_json_events() → Parse stream-json from tmux         │
+│ └─ handle_tool_use() → Detect file edits                    │
+│ └─ handle_tool_result() → Trigger GitButler commit          │
+│ └─ handle_result() → Extract session_id for resumption      │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│ services/gitbutler.py                                        │
+│ └─ call_pre_tool_hook() → but claude pre-tool               │
+│ └─ call_post_tool_hook() → but claude post-tool             │
+│ └─ call_stop_hook() → but claude stop                       │
+│ └─ commit_to_stack() → but commit -c {stack}                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+- **Deterministic event detection** — Parse structured JSON events from Claude
+- **Session resumption** — Extract `session_id` from JSON for `--resume`
+- **Real-time status updates** — Event-driven architecture
+- **Permission handling** — Non-interactive permission management with `--allowedTools`
+- **Multi-step task support** — Resume sessions with `-p --resume` for sequential work
+
+**Documentation:** See `docs/JSON_EVENTS.md` for complete event format specification.
 
 ---
 
@@ -104,28 +89,32 @@ Task = tmux process + GitButler stack + ephemeral Claude sessions
 
 ### Task
 
-The primary entity — a unit of work with its own tmux process and GitButler branch.
+The primary entity — a unit of work with its own tmux process and GitButler stack.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | UUID (PK) | Task ID = Claude session ID = GitButler session identifier |
 | `title` | string | Short task title |
-| `description` | string | Detailed task description (markdown supported) |
+| `description` | string | Detailed task description (markdown) |
 | `priority` | int | Higher = more important, default 0 |
 | `status` | enum | `pending`, `running`, `waiting`, `completed`, `failed` |
-| `stack_name` | string? | GitButler auto-created stack name (e.g., "zl-branch-15"), discovered after first edit |
-| `stack_cli_id` | string? | GitButler stack CLI ID (e.g., "u0"), nullable until first file edit |
+| `stack_name` | string? | GitButler auto-created stack (e.g., "zl-branch-15"), discovered after first edit |
+| `stack_cli_id` | string? | GitButler stack CLI ID (e.g., "u0"), nullable until first edit |
 | `tmux_session` | string? | tmux session ID, nullable until started |
 | `claude_status` | enum | `stopped`, `starting`, `idle`, `busy`, `waiting` |
-| `claude_restarts` | int | Number of times Claude was restarted in this task |
+| `claude_session_id` | string? | Claude session ID for `--resume` support |
+| `claude_restarts` | int | Number of times Claude was restarted |
+| `allowed_tools` | string | JSON array of allowed tool patterns for `--allowedTools` |
+| `pending_permission` | string? | Detected permission request details |
+| `continuation_count` | int | Number of times task was continued with new prompt |
+| `prompt_history` | string | JSON array of all prompts sent to this task |
 | `last_output` | string | Last ~2000 chars of terminal output |
-| `permission_prompt` | string? | Detected permission request text |
 | `created_at` | datetime | Task creation time |
 | `started_at` | datetime? | When tmux was spawned |
 | `completed_at` | datetime? | When task was completed |
 | `result` | string? | Completion notes or failure reason |
 
-**Key Design Decision: UUID as Primary Key**
+**Key Design: UUID as Primary Key**
 
 The task ID is a UUID that serves triple duty:
 1. **Task identifier** in Chorus database
@@ -134,106 +123,20 @@ The task ID is a UUID that serves triple duty:
 
 This eliminates the need for mapping between different identifiers and ensures perfect isolation between concurrent tasks.
 
-**Status Definitions:**
-- `pending`: Task created, not yet started (no tmux, no stack)
-- `running`: tmux process active, Claude is working
-- `waiting`: Claude is asking for permission (y/n prompt detected)
-- `completed`: Task finished, changes committed via GitButler
-- `failed`: Task failed or was cancelled
+### Document & DocumentReference
 
-**Claude Status Definitions:**
-- `stopped`: Claude not running in tmux (can be restarted)
-- `starting`: Claude is initializing
-- `idle`: Claude at `>` prompt, waiting for input
-- `busy`: Claude is processing
-- `waiting`: Claude asking for permission
-
-### Document
-
-A tracked markdown file in the project.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int (PK) | Auto-increment ID |
-| `path` | string (unique) | Relative path from project root |
-| `category` | string | `instructions`, `plans`, `communication`, `context`, `general` |
-| `description` | string? | Optional human description |
-| `pinned` | bool | Show at top of document list |
-| `last_modified` | datetime | File modification time |
-
-### DocumentReference
-
-A reference to specific lines in a document, linked to a task.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int (PK) | Auto-increment ID |
-| `document_id` | int (FK) | Referenced document |
-| `task_id` | int (FK) | Associated task |
-| `start_line` | int | Start line (1-indexed, inclusive) |
-| `end_line` | int | End line (1-indexed, inclusive) |
-| `note` | string? | Why this section is relevant |
-| `created_at` | datetime | Reference creation time |
-
-### Entity Relationship Diagram
-
-```
-┌─────────────────────┐
-│        Task         │
-├─────────────────────┤
-│ id (PK)             │
-│ title               │
-│ description         │
-│ priority            │
-│ status              │
-│ stack_id            │◀─── GitButler stack CLI ID
-│ stack_name          │◀─── GitButler stack name
-│ tmux_session        │◀─── tmux session ID
-│ claude_status       │
-│ claude_restarts     │
-│ last_output         │
-│ permission_prompt   │
-│ created_at          │
-│ started_at          │
-│ completed_at        │
-│ result              │
-└─────────────────────┘
-          │
-          │ 1:many
-          ▼
-┌─────────────────────┐       ┌─────────────────────┐
-│  DocumentReference  │       │      Document       │
-├─────────────────────┤       ├─────────────────────┤
-│ id (PK)             │       │ id (PK)             │
-│ task_id (FK)────────│───────│ path                │
-│ document_id (FK)────│──────▶│ category            │
-│ start_line          │       │ pinned              │
-│ end_line            │       │ last_modified       │
-│ note                │       └─────────────────────┘
-│ created_at          │
-└─────────────────────┘
-```
+See `models.py` for complete definitions. Documents are markdown files tracked for task context; DocumentReferences link specific line ranges to tasks.
 
 ---
 
 ## Task Lifecycle
 
-### State Machine
+### State Flow
 
 ```
-                    ┌──────────────────────────────────────────┐
-                    │                                          │
-                    ▼                                          │
-┌─────────┐    ┌─────────┐    ┌─────────┐    ┌───────────┐    │
-│ pending │───▶│ running │───▶│ waiting │───▶│ completed │    │
-└─────────┘    └─────────┘    └─────────┘    └───────────┘    │
-     │              │              │                          │
-     │              │              │         ┌────────┐       │
-     │              └──────────────┴────────▶│ failed │       │
-     │                                       └────────┘       │
-     │                                            │           │
-     └────────────────────────────────────────────┴───────────┘
-                         (restart task)
+pending → start_task() → running ↔ waiting (permissions) → complete_task() → completed
+   ↓                        ↓                                      ↓
+   └────── fail_task() ────┴──────────────────────────────────────┴──→ failed
 ```
 
 ### Workflow
@@ -244,306 +147,70 @@ A reference to specific lines in a document, linked to a task.
 
 2. **Start Task** (`pending` → `running`)
    - Generate UUID for task (used as task ID, Claude session ID, and GitButler session identifier)
-   - Create transcript file: `/tmp/chorus/task-{uuid}/transcript.json` with `{"type":"user","cwd":"{project_root}"}`
-   - Spawn tmux session: `tmux new-session -d -s task-{uuid} -c {project_root}`
-   - Start ttyd for web terminal: `ttyd -W -p {7681+port} tmux attach -t task-{uuid}`
-   - Write task context to `/tmp/chorus/task-{uuid}/context.md`
-   - Start Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
+   - Create transcript file: `/tmp/chorus/task-{uuid}/transcript.json`
+   - Spawn tmux session: `tmux new-session -d -s task-{uuid}`
+   - Start Claude with JSON output: `claude --output-format stream-json -p "{prompt}"`
    - Note: GitButler stack is NOT pre-created; it's auto-created by hooks after first file edit
 
 3. **Monitor Task** (`running` ↔ `waiting`)
    - Poll tmux output every 1 second for JSON events
-   - Parse events to detect Claude status (idle/busy/waiting)
+   - Parse events to detect Claude status and file edits
    - On **tool_use** event for Edit/Write/MultiEdit:
      - Call `but claude pre-tool` with task UUID and file path
-   - On **tool_result** event (success) for Edit/Write/MultiEdit:
+   - On **tool_result** event (success):
      - Call `but claude post-tool` with task UUID and file path
-     - If this is the first edit, discover and save the auto-created stack name/CLI ID
-     - Commit to the stack: `but commit {stack-name}`
-   - On permission prompt: update status, send desktop notification
-   - User can approve/deny from dashboard
+     - If this is the first edit, discover and save the auto-created stack name
+     - Commit to the stack: `but commit -c {stack-name}`
+   - On permission denial detection:
+     - Parse JSON events for permission errors
+     - Prompt user to approve
+     - Retry with `--allowedTools` flag
 
-4. **Restart Claude** (within `running`)
-   - Kill current Claude process in tmux
-   - Restart Claude with context: `claude --append-system-prompt "$(cat /tmp/.../context.md)"`
-   - Increment `claude_restarts` counter
-   - Context is automatically re-injected from existing file
+4. **Continue Task** (within `running`)
+   - When Claude stops (completes prompt), allow user to send new prompt
+   - Use `--resume {claude_session_id}` to continue same session
+   - Track continuation count and prompt history
 
 5. **Complete Task** (`running` → `completed`)
    - User triggers completion from dashboard
    - Call `but claude stop` with task UUID to finalize GitButler session
-   - Final commit if needed: `but commit {stack-name}`
-   - Stop ttyd (release port)
    - Kill tmux session
-   - Auto-created stack (e.g., "zl-branch-15") remains in GitButler for review/merge
-   - Cleanup context: delete `/tmp/chorus/task-{id}/`
+   - Auto-created stack remains in GitButler for review/merge
    - Update task status to `completed`
 
 6. **Fail Task** (`running` → `failed`)
    - User marks task as failed
-   - Optionally discard GitButler stack: `but branch delete {stack}`
-   - Stop ttyd (release port)
+   - Optionally discard GitButler stack
    - Kill tmux session
-   - Cleanup context: delete `/tmp/chorus/task-{id}/`
    - Record failure reason
+
+**See `PLAN.md` for detailed implementation notes.**
 
 ---
 
 ## API Specification
 
-### Task Endpoints
+### Key Endpoints
 
-#### `POST /api/tasks`
-Create a new task.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/tasks` | POST | Create new task |
+| `/api/tasks` | GET | List tasks with filtering |
+| `/api/tasks/{id}` | GET | Get task details |
+| `/api/tasks/{id}/start` | POST | Start task (spawn tmux + Claude) |
+| `/api/tasks/{id}/continue` | POST | Continue task with new prompt (`--resume`) |
+| `/api/tasks/{id}/approve-permission-and-retry` | POST | Approve permission and retry with `--allowedTools` |
+| `/api/tasks/{id}/complete` | POST | Complete task (call stop hook, kill tmux) |
+| `/api/tasks/{id}/fail` | POST | Fail task (optionally delete stack) |
+| `/api/events` | GET | SSE stream for real-time updates |
 
-**Request Body:**
-```json
-{
-  "title": "Implement user authentication",
-  "description": "Add login/logout endpoints using JWT...",
-  "priority": 10
-}
-```
-
-**Response:** `201 Created` with Task object.
-
-#### `GET /api/tasks`
-List tasks with optional filtering.
-
-**Query Parameters:**
-- `status`: Filter by status
-- `sort`: `priority` (default), `created_at`, `status`
-
-#### `GET /api/tasks/{task_id}`
-Get task details including document references.
-
-#### `PUT /api/tasks/{task_id}`
-Update task fields (title, description, priority).
-
-#### `POST /api/tasks/{task_id}/start`
-Start the task — creates stack, spawns tmux, launches Claude with task context.
-
-**Request Body (optional):**
-```json
-{
-  "initial_prompt": "Focus on the OAuth flow first"
-}
-```
-
-**Implementation:**
-1. Generate stack name: `task-{id}-{slug}`
-2. Create GitButler stack: `but branch new {stack_name}`
-3. Spawn tmux: `tmux new-session -d -s task-{id} -c {project_root}`
-4. Write task context to `/tmp/chorus/task-{id}/context.md` (includes task description, stack info, and `initial_prompt`)
-5. Start Claude with context: `claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"`
-6. Update task: `status = running`, `started_at = now()`, `tmux_session = task-{id}`, `stack_name = {stack_name}`
-
-**Note:** The `initial_prompt` is included in the context file under "## Instructions", not sent as a separate message. This ensures Claude sees all context in its system prompt.
-
-#### `POST /api/tasks/{task_id}/restart-claude`
-Restart Claude session within the task's tmux, re-injecting task context.
-
-**Implementation:**
-1. Send Ctrl+C to kill current Claude: `tmux send-keys -t {session} C-c`
-2. Wait briefly
-3. Start Claude with existing context: `claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"`
-4. Increment `claude_restarts`
-
-**Note:** Context is automatically re-injected from the existing `/tmp/chorus/task-{id}/context.md` file. No need to specify `resend_context` — it's always included.
-
-#### `POST /api/tasks/{task_id}/send`
-Send text to the task's Claude session.
-
-**Request Body:**
-```json
-{
-  "text": "Please also add unit tests"
-}
-```
-
-#### `POST /api/tasks/{task_id}/respond`
-Respond to a permission prompt.
-
-**Request Body:**
-```json
-{
-  "confirm": true
-}
-```
-
-#### `POST /api/tasks/{task_id}/complete`
-Complete the task — verifies commits, kills tmux.
-
-**Implementation:**
-1. Optionally verify stack has commits: `but branch show {stack} -j`
-2. Kill tmux session (CHORUS_TASK_STACK env var is automatically cleaned up)
-3. Update task: `status = completed`, `completed_at = now()`
-
-**Response:**
-```json
-{
-  "id": 1,
-  "status": "completed",
-  "completed_at": "2025-01-15T15:30:00Z"
-}
-```
-
-**Note:** All commits during the task were routed to the task's stack via the custom hook + CHORUS_TASK_STACK env var.
-
-#### `POST /api/tasks/{task_id}/fail`
-Mark task as failed — optionally deletes stack, kills tmux.
-
-**Request Body:**
-```json
-{
-  "reason": "Blocked by missing API spec",
-  "discard_stack": false
-}
-```
-
-**Implementation:**
-1. If `discard_stack`: Delete stack: `but branch delete {stack} --force`
-2. Kill tmux session
-3. Update task: `status = failed`, `result = {reason}`
-
-#### `DELETE /api/tasks/{task_id}`
-Delete task (only allowed for `pending` or `failed` tasks).
+**See `api/` directory for complete endpoint implementations.**
 
 ---
 
-### Document Endpoints
+## Component Details
 
-#### `GET /api/documents`
-List tracked documents.
-
-**Query Parameters:**
-- `category`: Filter by category
-- `discover`: If `true`, scan filesystem for new markdown files
-
-#### `GET /api/documents/{doc_id}`
-Get document with content and outline.
-
-#### `GET /api/documents/{doc_id}/lines`
-Get specific line range.
-
-#### `POST /api/documents/{doc_id}/references`
-Create a reference to specific lines for a task.
-
-**Request Body:**
-```json
-{
-  "task_id": 1,
-  "start_line": 10,
-  "end_line": 45,
-  "note": "Authentication requirements"
-}
-```
-
-#### `GET /api/tasks/{task_id}/references`
-Get all document references for a task.
-
-#### `DELETE /api/references/{ref_id}`
-Delete a document reference.
-
----
-
-### Event Stream
-
-#### `GET /api/events`
-Server-Sent Events stream for real-time updates.
-
-**Event Types:**
-
-```
-event: task_status
-data: {"task_id": 1, "old_status": "running", "new_status": "waiting", "permission_prompt": "Allow?"}
-
-event: claude_status
-data: {"task_id": 1, "claude_status": "idle", "restarts": 2}
-
-event: task_completed
-data: {"task_id": 1, "commit_message": "Add auth endpoints"}
-
-event: document_change
-data: {"document_id": 1, "path": "docs/spec.md"}
-```
-
----
-
-## Component Implementation Details
-
-### Important: Two "Hooks" Systems
-
-Chorus documentation references two different "hooks" systems that serve different purposes:
-
-| System | Purpose | Status | Location |
-|--------|---------|--------|----------|
-| **Claude Code hooks** | Monitor Claude sessions via callbacks (SessionStart, ToolUse, etc.) | DEPRECATED - replaced by JSON monitoring | `services/hooks.py` (legacy) |
-| **GitButler hooks** | CLI commands for stack isolation (`but claude pre-tool/post-tool/stop`) | Methods implemented, not yet integrated | `services/gitbutler.py` |
-
-**Current Architecture:**
-- Monitoring: JSON-based (reads `stream-json` output)
-- GitButler: CLI hooks defined but not yet called by `json_monitor.py`
-
-### JSON Monitor Service
-
-**Purpose:** Parse JSON events from Claude Code's `stream-json` output to track task status and trigger GitButler commits.
-
-**Architecture:**
-
-```
-Claude Code (--output-format stream-json) → tmux captures output → JSON Monitor polls tmux → Parse events → Update task → SSE to dashboard
-```
-
-**Key Components:**
-
-```python
-# services/json_parser.py
-class ClaudeJsonEvent:
-    """Dataclass for parsed JSON events"""
-    event_type: str  # "session_start", "tool_use", "tool_result", "text", "result", "error"
-    data: dict
-    session_id: Optional[str]
-
-class JsonEventParser:
-    """Parse stream-json output from Claude"""
-    def parse_line(line: str) -> Optional[ClaudeJsonEvent]
-    def parse_output(output: str) -> List[ClaudeJsonEvent]
-
-# services/monitor.py
-class Monitor:
-    """Monitor Claude sessions via JSON events"""
-    async def _monitor_task(task_id: int):
-        output = tmux.capture_json_events(task_id)
-        events = json_parser.parse_output(output)
-        for event in events:
-            await _handle_event(task_id, event)
-
-    async def _handle_event(task_id: int, event: ClaudeJsonEvent):
-        if event.event_type == "session_start":
-            task.json_session_id = event.session_id
-            task.claude_status = "idle"
-        elif event.event_type == "tool_result":
-            # Trigger GitButler commit after file edits
-            if is_file_edit_tool(event.data["tool_name"]):
-                gitbutler.commit_to_stack(task.stack_name)
-        elif event.event_type == "result":
-            # Extract session_id for resumption
-            task.json_session_id = event.session_id
-```
-
-**Key Features:**
-- **Session resumption** — Extract `session_id` from JSON for `--resume`
-- **Deterministic event detection** — Parse structured JSON events
-- **Self-contained monitoring** — Direct tmux output parsing
-
-### GitButler Integration
-
-GitButler provides **CLI hooks** (`but claude pre-tool/post-tool/stop`) that automatically create and manage stacks (virtual branches) per session. Chorus leverages these hooks to achieve perfect task isolation.
-
-**Note:** These are NOT Claude Code's SessionStart/ToolUse callbacks (which have been replaced by JSON monitoring). These are GitButler-specific CLI commands.
-
-#### Task as Logical Session
+### GitButler Integration - "Task as Logical Session"
 
 **Key Concept:** A Chorus **Task** maps to a single GitButler **session**, even if multiple Claude Code sessions are spawned for that task.
 
@@ -551,7 +218,6 @@ GitButler provides **CLI hooks** (`but claude pre-tool/post-tool/stop`) that aut
 Task (UUID: abc-123)
   = GitButler session_id: abc-123 (persistent)
   = Transcript: /tmp/chorus/task-abc-123/
-  = Tmux session: chorus-task-abc-123
   ├─ Claude session 1 (initial, session_id: xyz-111)
   │   └─ Edits → hooks use task_id (abc-123)
   ├─ [Claude crashes/restarts]

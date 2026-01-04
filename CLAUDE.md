@@ -117,13 +117,7 @@ Chorus uses **JSON-based monitoring** for Claude Code sessions. Set `monitoring.
 Chorus uses the term "hooks" in two different contexts:
 
 1. **Claude Code hooks** (DEPRECATED) — Callbacks like SessionStart, ToolUse that Claude Code can trigger. Replaced by JSON monitoring.
-2. **GitButler hooks** (IN PROGRESS) — CLI commands (`but claude pre-tool/post-tool/stop`) for stack isolation. Methods implemented but not yet integrated.
-
-### Legacy Claude Code Hook Mode
-
-Set `monitoring.use_json_mode = false` for compatibility.
-
-Uses Claude Code's SessionStart/ToolUse callbacks + status polling. Legacy files (`services/hooks.py`, `services/status_detector.py`) still exist for this mode but JSON mode is recommended.
+2. **GitButler hooks** (ACTIVE) — CLI commands (`but claude pre-tool/post-tool/stop`) for stack isolation. Fully implemented and integrated.
 
 ## Development
 
