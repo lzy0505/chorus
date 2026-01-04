@@ -119,8 +119,7 @@ def get_default_permission_policy() -> Dict[str, Any]:
             "Bash"
         ],
         "prompt_tools": [
-            "Write",
-            "Edit"
+            "Bash"
         ],
         "bash_patterns": {
             "allow": [
@@ -191,7 +190,7 @@ def get_permission_profile(profile_name: str) -> Dict[str, Any]:
         },
         "safe_edit": {
             "allowed_tools": ["Read", "Edit", "Write", "Grep", "Glob", "LSP"],
-            "prompt_tools": ["Write", "Edit"],
+            "prompt_tools": [],
             "bash_patterns": {
                 "allow": ["^git status", "^git diff", "^git log"],
                 "deny": [".*"]  # Block all other bash
