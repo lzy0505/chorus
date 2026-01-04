@@ -565,603 +565,78 @@ Result: All edits assigned to the same GitButler stack!
 - **Task UUID** (`task.id`): Used as `session_id` in GitButler hooks. Persistent across Claude restarts.
 - **Claude Session UUID**: Used for Claude Code's `--resume` flag. Changes on each restart.
 
-#### How GitButler Hooks Work
-
-When files are edited, Chorus calls GitButler hooks with the **task's UUID** (not Claude's session ID):
-
+**Hook Workflow:**
 1. **Pre-tool hook** (`but claude pre-tool`): Called BEFORE file edit
-   - Tells GitButler "session {task-uuid} is about to edit a file"
-   - Establishes session-to-stack mapping
-
 2. **Post-tool hook** (`but claude post-tool`): Called AFTER file edit
    - GitButler auto-creates a stack for this session (e.g., "zl-branch-15")
-   - Assigns the edited file to that stack
    - Same task UUID always uses the same stack (even across Claude restarts!)
-
 3. **Stop hook** (`but claude stop`): Called when **task completes** (not when Claude restarts)
-   - Finalizes session and allows cleanup
 
-#### Hook JSON Format
-
-**Pre-Tool:**
-```json
-{
-  "session_id": "task-uuid-here",
-  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
-  "hook_event_name": "PreToolUse",
-  "tool_name": "Edit|Write|MultiEdit",
-  "tool_input": {
-    "file_path": "/absolute/path/to/file"
-  }
-}
-```
-
-**Post-Tool:**
-```json
-{
-  "session_id": "task-uuid-here",
-  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
-  "hook_event_name": "PostToolUse",
-  "tool_name": "Edit|Write|MultiEdit",
-  "tool_input": {"file_path": "/absolute/path/to/file"},
-  "tool_response": {
-    "filePath": "/absolute/path/to/file",
-    "structuredPatch": []
-  }
-}
-```
-
-**Stop:**
-```json
-{
-  "session_id": "task-uuid-here",
-  "transcript_path": "/tmp/chorus/task-{uuid}/transcript.json",
-  "hook_event_name": "SessionEnd"
-}
-
-// Transcript file contains:
-{"type":"user","cwd":"/working/directory"}
-```
-
-#### Stack Discovery
-
-After the first file edit (post-tool hook), Chorus discovers the auto-created stack:
-
-```python
-# After calling post-tool hook
-status = gitbutler.get_status()
-
-# Find the newest stack with changes for files we just edited
-for stack in status.stacks:
-    if stack.name.startswith("zl-branch-"):
-        # Check if this stack has our file
-        if any(change.file_path == edited_file for change in stack.changes):
-            task.stack_name = stack.name
-            task.stack_cli_id = stack.cli_id
-            break
-```
-
-#### Benefits
-
-- ✅ **No marking needed** - No global state, perfect for concurrent tasks
-- ✅ **Automatic isolation** - Each task UUID → unique session → unique stack
-- ✅ **No reassignment** - Files go directly to the correct stack
-- ✅ **Clean 1:1 mapping** - Task ID = Session ID = Stack session identifier
-
-```
-tmux-1 (task 1):                    tmux-2 (task 2):
-Claude edits files                  Claude edits files
-    ↓ JSON event                        ↓ JSON event
-JSON Monitor detects tool_result    JSON Monitor detects tool_result
-    ↓                                   ↓
-Chorus looks up task by session_id  Chorus looks up task by session_id
-    ↓                                   ↓
-but commit -c task-1-auth           but commit -c task-2-api
-```
-
-**How it works:**
-1. Chorus tracks `task.stack_name` in the database
-2. JSON Monitor parses `stream-json` events from Claude's output
-3. On `tool_result` event for Edit/Write tools, Chorus commits
-4. Chorus looks up the task by `session_id` and retrieves `stack_name`
-5. Chorus runs `but commit -c {stack_name}` to commit to the correct stack
-
-**Task Lifecycle:**
-```
-Task Start:
-  1. but branch new task-{id}-{slug}    # Create stack
-  2. Store stack_name in task record    # Chorus tracks it
-  3. Start Claude in tmux               # Chorus routes commits
-
-Task Complete:
-  1. Kill tmux session
-
-Task Fail:
-  1. Optionally: but branch delete {stack} --force
-  2. Kill tmux session
-```
-
-**Chorus + GitButler Architecture:**
-```
-Claude Code (in tmux with --output-format stream-json)
-    ↓ Edit/Write tool
-    ↓ JSON event: tool_result
-JSON Monitor (polls tmux output)
-    ↓ Parse JSON events
-    ↓ Detect file edits
-Chorus API
-    ↓ Look up task by session_id → get stack_name
-    ↓ Run: but commit -c {stack_name}
-    ↓ Update task status
-Dashboard (real-time via SSE)
-```
-
-Chorus provides centralized orchestration via JSON monitoring for:
-- Task-to-session mapping via `json_session_id`
-- Deterministic event detection from structured JSON
-- Real-time status updates to dashboard
-- Task lifecycle management (start/complete/fail)
-- Session resumption with `--resume`
-
-### tmux Commands
-
-```bash
-# Create session for task
-tmux new-session -d -s task-{id} -c {project_root}
-
-# Start Claude with task context and shared hooks config
-tmux send-keys -t task-{id} 'CLAUDE_CONFIG_DIR="/tmp/chorus/hooks/.claude" claude --append-system-prompt "$(cat /tmp/chorus/task-{id}/context.md)"' Enter
-
-# Capture output
-tmux capture-pane -t task-{id} -p -S -100
-
-# Kill Claude (Ctrl+C)
-tmux send-keys -t task-{id} C-c
-
-# Kill session
-tmux kill-session -t task-{id}
-```
-
-### Web Terminal Access (ttyd)
-
-**Purpose:** Provide interactive web-based terminal access to task tmux sessions.
-
-**Architecture:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Task Detail View                                                            │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │  <iframe src="http://localhost:7682">                                 │  │
-│  │     ┌─────────────────────────────────────────────────────────────┐   │  │
-│  │     │  ttyd (xterm.js)                                            │   │  │
-│  │     │  └── WebSocket ──► tmux attach -t task-1                    │   │  │
-│  │     │                         └── Claude Code session             │   │  │
-│  │     └─────────────────────────────────────────────────────────────┘   │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**How it works:**
-
-1. When a task starts, ttyd is launched attached to the task's tmux session
-2. Port is calculated as `base_port (7681) + task_id`
-3. The dashboard embeds ttyd in an iframe for full terminal interaction
-4. When task completes/fails, ttyd is stopped and port is released
-
-**TtydService (`services/ttyd.py`):**
-
-```python
-class TtydService:
-    def start(self, task_id: int, session_id: str) -> TtydInfo:
-        """Start ttyd for a task's tmux session."""
-        port = 7681 + task_id
-        cmd = ["ttyd", "-W", "-p", str(port), "tmux", "attach", "-t", session_id]
-        # Launches ttyd in background, returns connection info
-
-    def stop(self, task_id: int) -> None:
-        """Stop ttyd for a task (releases port)."""
-
-    def get_url(self, task_id: int) -> str:
-        """Get ttyd URL for a task (e.g., http://localhost:7682)."""
-```
-
-**Key options:**
-- `-W`: Writable mode (allows keyboard input)
-- `-p PORT`: Port to listen on
-
-**Lifecycle:**
-
-| Event | Action |
-|-------|--------|
-| Task Start | `ttyd -W -p {7681+id} tmux attach -t {session}` |
-| Task Running | iframe shows terminal, user can interact |
-| Task Complete/Fail | `kill` ttyd process, port released |
-
-**Benefits over polling-based terminal output:**
-- Full terminal interaction (keyboard input, scrollback)
-- Real-time updates (no 5-second polling delay)
-- Copy/paste support
-- Resizable terminal
-
-**Note:** ttyd is optional. If not installed, tasks still work but without web terminal access.
-
-### JSON Events Viewer
-
-**Purpose:** Provide a user-friendly interface for viewing and analyzing Claude Code's JSON event stream.
-
-**Location:** `/dashboard/tasks/{task_id}/output`
-
-**Features:**
-
-1. **Interactive Event Display**
-   - Collapsible event cards with expand/collapse animation
-   - Color-coded event type badges (system, assistant, tool_execution, result, error)
-   - Smart summaries showing essential info by default
-   - Click to expand and see full details
-
-2. **Event Types Rendered:**
-   - `system` - Session initialization details
-   - `assistant` - Claude's text responses with markdown rendering
-   - `tool_execution` - Paired tool_use + tool_result (combined view)
-   - `user` - User input (hidden when only containing tool_result)
-   - `result` - Session completion with token counts
-   - `error` - Error messages with type and details
-
-3. **Tool Pairing:**
-   - Automatically combines tool_use blocks from assistant messages with tool_result blocks from user messages
-   - Matches by ID (tool_use.id == tool_result.tool_use_id)
-   - Shows tool name, input (file path/command), success/error badge
-   - Displays result preview (first 80 chars)
-   - Expandable to show full JSON for both blocks
-   - Hides redundant user events that only contain tool_result
-
-4. **Markdown Rendering:**
-   - Text events show rendered markdown instead of raw JSON in expanded view
-   - Assistant message text blocks are extracted and rendered as markdown
-   - Supports: headings, bold/italic, inline code, code blocks (fenced), lists, tables, links, blockquotes
-   - Comprehensive CSS styling for all markdown elements
-   - Note indicator when assistant message contains both text and tool_use blocks
-
-5. **CSS Styling:**
-   - Dark theme with color-coded badges
-   - Smooth expand/collapse transitions (max-height animation)
-   - Monospace fonts for code
-   - Proper spacing and padding for readability
-
-6. **State Preservation During Auto-Refresh:**
-   - Auto-refresh updates every 2 seconds to show new events
-   - Preserves which events are expanded during refresh
-   - Stores expanded event indices before DOM swap
-   - Restores expanded class after swap completes
-   - Prevents user's viewing state from being reset
-   - Also preserves scroll position (auto-scrolls if user was at bottom)
-   - Eliminates visual flashing by hiding container during swap (opacity: 0)
-   - CSS optimization: removed `transition: all` from elements to prevent animation during refresh
-
-**Implementation:**
-- `api/dashboard.py` - `get_task_output()` endpoint renders HTML from JSON events
-- `templates/partials/task_detail.html` - Auto-refresh with state preservation logic
-- `static/style.css` - Styles for `.json-event`, `.markdown-content`, event type badges
-- Uses `markdown` library with `fenced_code` and `tables` extensions
+**Hook JSON Format:** See `design.md` (legacy, full version) or `services/gitbutler.py` for details.
 
 **Benefits:**
-- No more raw JSON clutter - text content is beautifully formatted
-- Tool executions show clear input/output pairing
-- Easy to scan event stream with collapsible sections
-- Markdown content is properly formatted for readability
+- ✅ **No marking needed** - No global state, perfect for concurrent tasks
+- ✅ **Automatic isolation** - Each task UUID → unique session → unique stack
+- ✅ **Clean 1:1 mapping** - Task ID = Session ID = Stack session identifier
 
-### Task Context Injection
-
-**Purpose:** Provide task-specific context to Claude Code without polluting the project directory.
-
-**Architecture:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  POST /api/tasks/{id}/start                                 │
-│                                                             │
-│  1. Write context to /tmp/chorus/task-{id}/context.md       │
-│  2. Start Claude with --append-system-prompt flag           │
-│  3. Context persists for entire Claude session              │
-│  4. Cleaned up when task completes/fails                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Why `/tmp/` instead of project directory?**
-- Context files are task-scoped and ephemeral
-- No pollution in working directory or git history
-- Each task's context is isolated (`/tmp/chorus/task-{id}/`)
-- Automatically cleaned up on task completion
-
-**Context File Format:**
-
-```markdown
-# Current Task: Fix authentication timeout bug
-Task ID: 42
-GitButler Stack: `task-42-fix-authentication-timeout-bug`
-
-## Description
-Users are getting logged out after 5 minutes instead of 30 minutes.
-The session timeout config seems to be ignored.
-
-## Git Workflow
-- All changes for this task should be committed to stack: `task-42-fix-authentication-timeout-bug`
-- Use `but commit -c task-42-fix-authentication-timeout-bug` to commit changes
-- Do NOT use `git commit` directly
-
-## Instructions
-Check the JWT expiry settings in auth.py first
-```
-
-**How `--append-system-prompt` works:**
-- Adds content to Claude's system prompt at startup
-- Context is visible to Claude throughout the entire session
-- Survives all interactions within the session
-- Re-injected automatically on `restart-claude`
-
-**Implementation (`services/context.py`):**
-
-```python
-CONTEXT_BASE_DIR = Path("/tmp/chorus")
-
-def write_task_context(task: Task, user_prompt: str = None) -> Path:
-    """Write task context to /tmp/chorus/task-{id}/context.md"""
-    context_dir = CONTEXT_BASE_DIR / f"task-{task.id}"
-    context_dir.mkdir(parents=True, exist_ok=True)
-
-    context_file = context_dir / "context.md"
-    context_file.write_text(build_task_context(task, user_prompt))
-    return context_file
-
-def cleanup_task_context(task_id: int) -> None:
-    """Remove context directory on task completion/failure"""
-    shutil.rmtree(CONTEXT_BASE_DIR / f"task-{task_id}", ignore_errors=True)
-```
-
-**Lifecycle:**
-
-| Event | Action |
-|-------|--------|
-| Task Start | Write context to `/tmp/chorus/task-{id}/context.md` |
-| Claude Start | `claude --append-system-prompt "$(cat /tmp/.../context.md)"` |
-| Claude Restart | Re-inject same context file |
-| Task Complete/Fail | Delete `/tmp/chorus/task-{id}/` directory |
-
-### JSON Event Parsing
+### JSON Event Monitoring
 
 Chorus uses Claude Code's `--output-format stream-json` flag to get structured event data for deterministic status detection.
 
-**JSON Events Parsed:**
+**Event Types Parsed:**
 
 | Event Type | When It Fires | Actions |
 |------------|---------------|---------|
-| `session_start` | Claude launches | Store `json_session_id`, set `claude_status = "idle"` |
-| `tool_use` | Claude calls a tool | Detect file edits (Edit, Write tools) |
-| `tool_result` | Tool completes | Trigger GitButler commit if file was modified |
+| `session_start` | Claude launches | Store `claude_session_id`, set status = "idle" |
+| `tool_use` | Claude calls a tool | Detect file edits (Edit, Write, MultiEdit tools) |
+| `tool_result` | Tool completes | Trigger GitButler hooks and commit if file was modified |
 | `text` | Claude outputs text | Update task output stream |
 | `result` | Session completes | Extract final `session_id` for resumption |
 | `error` | Error occurs | Log error, update task status |
 
-**Stream-JSON Format:**
+**See `docs/JSON_EVENTS.md` for complete specification of all 10 event types.**
 
-Claude outputs newline-delimited JSON when launched with `--output-format stream-json`:
+### Permission Management
 
-```json
-{"type":"session_start","session_id":"abc123"}
-{"type":"tool_use","tool":{"name":"Read","input":{"file_path":"README.md"}}}
-{"type":"tool_result","tool":"Read","result":"...file contents..."}
-{"type":"text","text":"I can see the README..."}
-{"type":"result","session_id":"abc123","stop_reason":"end_turn"}
-```
+Without permission flags, Claude Code's `-p` mode blocks indefinitely on permission prompts, making it unusable in tmux.
 
-**Parsing Architecture:**
+**Current Approach: Detection + `--allowedTools`**
 
-```python
-# services/json_parser.py
-class JsonEventParser:
-    def parse_line(self, line: str) -> Optional[ClaudeJsonEvent]:
-        """Parse a single line of JSON output"""
-        try:
-            data = json.loads(line)
-            event_type = data.get("type")
-            session_id = data.get("session_id")
-            return ClaudeJsonEvent(event_type=event_type, data=data, session_id=session_id)
-        except json.JSONDecodeError:
-            return None
+1. **Detection**: Parse JSON events for permission denial patterns
+2. **Prompt User**: Show permission request in UI
+3. **Retry**: User approves → add to `--allowedTools` → retry with `--resume`
 
-    def parse_output(self, output: str) -> List[ClaudeJsonEvent]:
-        """Parse multiple lines of JSON output"""
-        events = []
-        for line in output.splitlines():
-            if event := self.parse_line(line):
-                events.append(event)
-        return events
+**Pattern Support:**
+- `Bash(git:*)` - Allow all git commands
+- `Bash(git commit:*)` - Allow git commit only
+- `Edit`, `Write` - Allow file editing tools
+- etc.
 
-# services/tmux.py
-def capture_json_events(task_id: int) -> str:
-    """Capture JSON events from tmux pane"""
-    session_id = f"task-{task_id}"
-    result = subprocess.run(
-        ["tmux", "capture-pane", "-t", session_id, "-p"],
-        capture_output=True,
-        text=True
-    )
-    return result.stdout
-```
+**See `docs/PERMISSION_HANDLING.md` for detailed configuration strategies.**
 
-**Session Resumption:**
-
-The `json_session_id` extracted from events enables resuming Claude sessions:
+### tmux Session Management
 
 ```bash
-# Initial session
-claude -p "Start working on auth" --output-format stream-json
+# Create session for task
+tmux new-session -d -s task-{uuid} -c {project_root}
 
-# Resume same session later
-claude -p "Continue" --resume <json_session_id> --output-format stream-json
+# Start Claude with JSON output
+tmux send-keys -t task-{uuid} 'claude --output-format stream-json -p "{prompt}"' Enter
+
+# Capture JSON output
+tmux capture-pane -t task-{uuid} -p -S -2000
+
+# Kill session
+tmux kill-session -t task-{uuid}
 ```
 
-Chorus automatically uses `--resume` when sending follow-up messages to a task.
-
-### Spawned Session Authentication
-
-Spawned Claude sessions need authentication to work. Claude Code's OAuth subscription authentication doesn't automatically propagate to isolated config directories. This section documents the authentication design.
-
-**The Problem:**
-
-When `CLAUDE_CONFIG_DIR` is set to an isolated directory, Claude Code:
-1. Reads config/settings from that directory ✓
-2. But OAuth tokens from browser-based login don't transfer automatically ✗
-
-Simply copying `~/.claude.json` (which contains `oauthAccount` metadata) is **not sufficient** — it lacks the actual OAuth access tokens.
-
-**The Solution:**
-
-Claude Code supports `CLAUDE_CODE_OAUTH_TOKEN` for headless/automated authentication. Users must:
-
-1. **Generate a long-lived OAuth token** (one-time setup):
-   ```bash
-   claude setup-token
-   ```
-   This opens a browser for OAuth flow and outputs a token.
-
-2. **Set the environment variable** before starting Chorus:
-   ```bash
-   export CLAUDE_CODE_OAUTH_TOKEN="<token-from-step-1>"
-   ```
-
-3. **Chorus passes the token** to spawned Claude sessions:
-   ```python
-   # services/tmux.py - start_claude()
-   env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
-   oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-   if oauth_token:
-       env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
-   ```
-
-**Additional Requirements:**
-
-The isolated config's `.claude.json` must have `hasCompletedOnboarding: true` to skip the interactive onboarding flow. Chorus ensures this by copying the user's `~/.claude.json` (which has this flag set after initial login).
-
-See: [GitHub Issue #8938](https://github.com/anthropics/claude-code/issues/8938)
-
-**Credential Refresh:**
-
-Credentials are inherited from the user's global `~/.claude.json` when starting tasks. The `CLAUDE_CODE_OAUTH_TOKEN` environment variable ensures spawned sessions authenticate properly.
-
----
-
-## Dashboard Implementation
-
-### Layout
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Chorus                                                    [+ New Task] │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─ Tasks ─────────────────────────────────────────────────────────────┐│
-│  │                                                                     ││
-│  │  ● Implement auth        [RUNNING]  stack: task-1-auth   P:10      ││
-│  │    Claude: BUSY          restarts: 0                               ││
-│  │    [Restart Claude] [Send Message] [Complete] [Fail]               ││
-│  │                                                                     ││
-│  │  ⚠ Add rate limiting     [WAITING]  stack: task-2-rate   P:5      ││
-│  │    Claude: WAITING       "Allow write to api.py?"                  ││
-│  │    [Approve] [Deny] [Restart Claude]                               ││
-│  │                                                                     ││
-│  │  ○ Setup tests           [PENDING]                       P:0       ││
-│  │    [Start Task]                                                    ││
-│  │                                                                     ││
-│  │  ✓ Initial setup         [COMPLETED]  stack: task-0-setup         ││
-│  │                                                                     ││
-│  └─────────────────────────────────────────────────────────────────────┘│
-│                                                                         │
-│  ┌─ Documents ──────────────────────────────────────────────────────┐  │
-│  │ 📌 CLAUDE.md                    instructions                      │  │
-│  │ 📄 docs/architecture.md         context                           │  │
-│  │                                                                   │  │
-│  │ ┌─ Viewer: docs/architecture.md ───────────────────────────────┐ │  │
-│  │ │ ## Outline              │ ## Content                         │ │  │
-│  │ │ > Architecture          │  # Architecture                    │ │  │
-│  │ │   > Components          │  ...                               │ │  │
-│  │ │                         │                                    │ │  │
-│  │ │                         │ [Add lines 3-15 to Task #1]        │ │  │
-│  │ └─────────────────────────┴────────────────────────────────────┘ │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Key Interactions
-
-1. **Task List:**
-   - Auto-refreshes via SSE on status changes
-   - Shows task status, Claude status, stack name, restart count
-   - Action buttons contextual to status
-   - Waiting tasks show permission prompt inline
-
-2. **Task Actions:**
-   - **Start Task**: Creates stack, spawns tmux, launches Claude
-   - **Restart Claude**: Kills and restarts Claude in tmux
-   - **Send Message**: Opens modal to send additional instructions
-   - **Complete**: Finalizes task (GitButler auto-commits)
-   - **Fail**: Marks task failed, optionally deletes stack
-   - **Approve/Deny**: Responds to permission prompt
-
-3. **Document Viewer:**
-   - Line selection → add reference to a task
-
----
-
-## Implementation Phases
-
-### Phase 1: Core Foundation ✅
-- [x] Project structure
-- [x] config.py with settings
-- [x] SQLModel definitions
-- [x] Database setup
-- [x] tmux service wrapper
-
-### Phase 2: Task API + JSON Monitoring ✅
-- [x] `services/tmux.py` - Task-centric tmux operations
-- [x] `services/json_parser.py` - Parse stream-json output
-- [x] `services/monitor.py` - JSON event monitoring
-- [x] `services/gitbutler.py` - GitButler CLI integration
-- [x] `api/tasks.py` - Full task lifecycle endpoints
-- [x] `api/events.py` - SSE endpoint for real-time updates
-
-### Phase 3: Dashboard ✅
-- [x] Task-centric dashboard layout
-- [x] htmx interactions for all actions
-- [x] SSE integration
-- [x] Dark theme styling
-
-### Phase 4: Polish & Reliability ✅
-- [x] Error handling
-- [x] Edge cases (Claude crash, tmux death)
-- [x] Comprehensive logging system
-- [x] JSON monitoring migration
-
-### Phase 5: Future Enhancements
-- [ ] Document API (`services/documents.py`, `api/documents.py`)
-- [ ] Desktop notifications
-- [ ] Integration tests with tmux
-- [ ] Web terminal UI improvements
+**See `services/tmux.py` for complete implementation.**
 
 ---
 
 ## Configuration
 
-### TOML Configuration
-
-Chorus uses a TOML configuration file passed as the first argument:
-
-```bash
-uv run python main.py chorus.toml /absolute/path/to/project
-```
-
-Example `chorus.toml`:
+Chorus uses a TOML configuration file:
 
 ```toml
 [server]

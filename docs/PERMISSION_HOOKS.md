@@ -1,8 +1,16 @@
 # Task-Specific Permission Hooks with PermissionRequest
 
+> **⚠️ DEPRECATED (2026-01-04):** This permission approach using PermissionRequest hooks has been replaced by detection-based permission management using `--allowedTools`. The detection approach is more compatible with Claude Code's `-p` mode. See `docs/PERMISSION_HANDLING.md` for the current approach.
+
 ## Overview
 
-Chorus implements **per-task permission policies** using Claude Code's `PermissionRequest` hooks. Each task has its own isolated Claude configuration directory, ensuring permissions don't pollute the global `~/.claude` config.
+Chorus **previously implemented** per-task permission policies using Claude Code's `PermissionRequest` hooks. Each task had its own isolated Claude configuration directory, ensuring permissions didn't pollute the global `~/.claude` config.
+
+**Why Deprecated:** PermissionRequest hooks were replaced in favor of a detection-based approach that:
+- Works better with `-p` (non-interactive) mode
+- Simpler implementation
+- Uses `--allowedTools` flag for permission management
+- Detects permission denials from JSON events and prompts user
 
 **Key Features:**
 - ✅ Task-specific permission policies stored in database
