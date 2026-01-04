@@ -335,6 +335,46 @@ class JsonMonitor:
                         logger.info(f"Task {task_id}: Claude session started, ID={session_id}")
                         self.db.commit()
 
+                case "assistant":
+                    # Assistant messages may contain tool_use blocks - extract and process them
+                    message = event.data.get("message", {})
+                    content = message.get("content", [])
+
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            # Extract tool information
+                            tool_name = block.get("name", "unknown")
+                            tool_input = block.get("input", {})
+                            file_path = tool_input.get("file_path")
+                            tool_id = block.get("id")
+
+                            logger.debug(f"Task {task_id}: Tool use from assistant - {tool_name}")
+
+                            # Store tool_use for pairing with tool_result
+                            if task_id not in self._recent_tool_uses:
+                                self._recent_tool_uses[task_id] = []
+                            self._recent_tool_uses[task_id].append({
+                                "id": tool_id,
+                                "toolName": tool_name,
+                                "toolInput": tool_input
+                            })
+                            self._recent_tool_uses[task_id] = self._recent_tool_uses[task_id][-10:]
+
+                            # Call pre-tool hook for file edits
+                            if tool_name in ["Edit", "Write", "MultiEdit"] and file_path:
+                                logger.info(f"Task {task_id}: Calling pre-tool hook for {file_path}")
+                                try:
+                                    self.gitbutler.call_pre_tool_hook(
+                                        session_id=str(task_id),
+                                        file_path=file_path,
+                                        transcript_path=transcript_path,
+                                        tool_name=tool_name
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Pre-tool hook failed: {e}", exc_info=True)
+
+                    self.db.commit()
+
                 case "tool_use":
                     # Claude is using a tool
                     task.claude_status = ClaudeStatus.busy
