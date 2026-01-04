@@ -292,7 +292,9 @@ class TmuxService:
 
         # Set environment variables in the tmux session so they persist
         # and are inherited by Claude and all its subprocesses (including permission handler)
-        _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CONFIG_DIR", str(task_config_dir)])
+        # CLAUDE_CONFIG_DIR should point to the .claude directory
+        claude_config_dir = task_config_dir / ".claude"
+        _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CONFIG_DIR", str(claude_config_dir)])
 
         # Set CHORUS_DB_PATH for permission handler script
         from config import get_config
