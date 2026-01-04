@@ -267,6 +267,7 @@ class TmuxService:
         initial_prompt: Optional[str] = None,
         context_file: Optional[Path] = None,
         resume_session_id: Optional[str] = None,
+        allowed_tools: Optional[str] = None,
     ) -> None:
         """Start Claude Code in JSON stream mode for event parsing.
 
@@ -275,6 +276,7 @@ class TmuxService:
             initial_prompt: Optional prompt to send after Claude starts.
             context_file: Optional path to context file for --append-system-prompt.
             resume_session_id: Optional session ID for --resume flag.
+            allowed_tools: Optional comma-separated list of allowed tools (e.g., "Bash(git:*),Edit,Write").
 
         Raises:
             SessionNotFoundError: If the tmux session doesn't exist.
@@ -325,6 +327,12 @@ class TmuxService:
         if resume_session_id:
             claude_cmd += f" --resume {resume_session_id}"
             logger.debug(f"Resuming Claude session: {resume_session_id}")
+
+        # Add allowed tools if provided
+        if allowed_tools:
+            escaped_tools = allowed_tools.replace('"', '\\"')
+            claude_cmd += f' --allowedTools "{escaped_tools}"'
+            logger.debug(f"Setting allowed tools: {allowed_tools}")
 
         # If there's an initial prompt, replace the empty prompt
         if initial_prompt:

@@ -294,22 +294,8 @@ async def start_task(
     # 3. Ensure hooks config exists (shared across all sessions)
     hooks.ensure_hooks()
 
-    # 3b. Create task-specific Claude config with permission hooks
-    from services.claude_config import create_task_claude_config, get_default_permission_policy
-
-    # Use task's permission policy if set, otherwise use default
-    if task.permission_policy:
-        try:
-            policy = json.loads(task.permission_policy)
-        except json.JSONDecodeError:
-            logger.warning(f"Invalid permission_policy JSON for task {task_id}, using default")
-            policy = get_default_permission_policy()
-    else:
-        policy = get_default_permission_policy()
-        task.permission_policy = json.dumps(policy)
-
-    create_task_claude_config(task_id, permission_policy=policy)
-    logger.info(f"Created task-specific Claude config with permission policy")
+    # Note: We no longer use PermissionRequest hooks (not compatible with -p mode)
+    # Permission management is now handled via --allowedTools flag and retry workflow
 
     # 4. Update task status
     task.status = TaskStatus.running
@@ -436,6 +422,123 @@ async def restart_claude(
     return ActionResponse(
         status="ok",
         message=f"Claude restarted for task {task_id} (restart #{task.claude_restarts})",
+        task_id=task_id,
+    )
+
+
+class PermissionApprovalRequest(BaseModel):
+    """Request to approve adding a permission to allowedTools."""
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str  # Tool name (e.g., "Bash", "Write")
+    pattern: Optional[str] = None  # Optional pattern (e.g., "git:*", "git commit:*")
+
+
+@router.post("/{task_id}/approve-permission-and-retry")
+async def approve_permission_and_retry(
+    task_id: UUID,
+    approval: PermissionApprovalRequest,
+    db: Session = Depends(get_db),
+) -> ActionResponse:
+    """Approve adding a permission to --allowedTools and retry Claude with updated permissions.
+
+    This implements the -p mode permission workflow:
+    1. Claude hits permission denial
+    2. User approves adding permission to allowedTools
+    3. Resume Claude session with updated --allowedTools and a message saying "You now have permission. Try again."
+
+    Args:
+        task_id: Task UUID
+        approval: Tool and optional pattern to add to allowed list
+
+    Returns:
+        ActionResponse with status
+    """
+    logger.info(f"Approving permission for task {task_id}: {approval.tool}")
+    task = get_task_or_404(db, task_id)
+
+    if task.status != TaskStatus.waiting:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task is {task.status}, can only approve permissions for waiting tasks",
+        )
+
+    # Build permission string (e.g., "Bash(git:*)" or just "Write")
+    if approval.pattern:
+        permission_str = f"{approval.tool}({approval.pattern})"
+    else:
+        permission_str = approval.tool
+
+    # Add to allowed_tools list
+    current_allowed = task.allowed_tools.split(",") if task.allowed_tools else []
+    if permission_str not in current_allowed:
+        current_allowed.append(permission_str)
+        task.allowed_tools = ",".join(current_allowed)
+        logger.info(f"Added {permission_str} to allowed tools: {task.allowed_tools}")
+
+    # Clear pending permission
+    task.pending_permission = None
+    task.permission_prompt = None
+
+    db.add(task)
+    db.commit()
+
+    # Restart Claude with updated permissions and a retry message
+    from config import get_config
+    config = get_config()
+    tmux = TmuxService()
+
+    # Get context file
+    context_file = get_context_file(task_id)
+
+    # Build retry message
+    retry_message = f"You now have permission to use {permission_str}. Please try again."
+
+    try:
+        if config.monitoring.use_json_mode:
+            import subprocess
+            import time
+            session_id = tmux.get_session_id(task_id)
+
+            # Send Ctrl-C to interrupt
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.2)
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.3)
+
+            # Restart with --resume and updated allowedTools
+            logger.info(f"Restarting Claude with allowed_tools: {task.allowed_tools}")
+
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=retry_message,
+                context_file=context_file,
+                resume_session_id=task.claude_session_id,
+                allowed_tools=task.allowed_tools,
+            )
+        else:
+            raise HTTPException(
+                status_code=501,
+                detail="Permission retry only supported in JSON mode",
+            )
+    except SessionNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tmux session for task {task_id} not found",
+        )
+
+    # Update task state
+    task.status = TaskStatus.running
+    task.claude_status = ClaudeStatus.starting
+    task.claude_restarts += 1
+
+    db.add(task)
+    db.commit()
+
+    logger.info(f"Permission approved and Claude restarted for task {task_id}")
+    return ActionResponse(
+        status="ok",
+        message=f"Permission approved ({permission_str}) and Claude restarted",
         task_id=task_id,
     )
 

@@ -73,6 +73,11 @@ class Task(SQLModel, table=True):
     # Permission policy (task-specific, enforced via PermissionRequest hooks)
     permission_policy: str = Field(default="")  # JSON object with allowed tools, patterns, auto-approve rules
 
+    # Permission retry system for -p mode
+    # When Claude hits permission denial in -p mode, we detect it and offer to add to --allowedTools
+    allowed_tools: str = Field(default="")  # Comma-separated list of allowed tools (e.g., "Bash(git:*),Edit,Write")
+    pending_permission: Optional[str] = Field(default=None)  # JSON: tool/command that was just denied and needs approval
+
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)  # When tmux was spawned

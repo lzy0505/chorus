@@ -67,10 +67,6 @@ async def lifespan(app: FastAPI):
 
     create_db_and_tables()
 
-    # Register permission hook in global Claude config
-    from services.claude_config import ensure_global_permission_hook
-    ensure_global_permission_hook()
-
     # Start monitoring service based on configuration
     monitor = None
     poller = None

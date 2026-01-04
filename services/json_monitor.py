@@ -435,20 +435,48 @@ class JsonMonitor:
                         logger.debug(f"Task {task_id}: Extracted Claude session_id={session_id}")
                         self.db.commit()
 
-                    # Mark as idle
-                    task.claude_status = ClaudeStatus.idle
-                    self.db.commit()
+                    # Check for permission denials (for -p mode workflow)
+                    denial = self.json_parser.detect_permission_denial(event)
+                    if denial:
+                        import json as json_lib
+                        task.pending_permission = json_lib.dumps(denial)
+                        from models import TaskStatus
+                        task.status = TaskStatus.waiting
+                        task.claude_status = ClaudeStatus.waiting
+                        task.permission_prompt = f"Permission needed: {denial['tool']}" + (
+                            f" ({denial['command']})" if denial.get('command') else ""
+                        )
+                        logger.info(f"Task {task_id}: Permission denial detected - {denial}")
+                        self.db.commit()
+                    else:
+                        # Mark as idle only if no permission denial
+                        task.claude_status = ClaudeStatus.idle
+                        self.db.commit()
 
                 case "text" | "assistant":
-                    # Claude is responding, mark as busy
-                    if task.claude_status != ClaudeStatus.busy:
-                        task.claude_status = ClaudeStatus.busy
-                    # If task was waiting, set back to running
-                    from models import TaskStatus
-                    if task.status == TaskStatus.waiting:
-                        task.status = TaskStatus.running
-                        task.permission_prompt = None
-                    self.db.commit()
+                    # Check for permission denials in assistant messages
+                    denial = self.json_parser.detect_permission_denial(event)
+                    if denial:
+                        import json as json_lib
+                        task.pending_permission = json_lib.dumps(denial)
+                        from models import TaskStatus
+                        task.status = TaskStatus.waiting
+                        task.claude_status = ClaudeStatus.waiting
+                        task.permission_prompt = f"Permission needed: {denial['tool']}" + (
+                            f" ({denial['command']})" if denial.get('command') else ""
+                        )
+                        logger.info(f"Task {task_id}: Permission denial detected - {denial}")
+                        self.db.commit()
+                    else:
+                        # Claude is responding, mark as busy
+                        if task.claude_status != ClaudeStatus.busy:
+                            task.claude_status = ClaudeStatus.busy
+                        # If task was waiting, set back to running
+                        from models import TaskStatus
+                        if task.status == TaskStatus.waiting:
+                            task.status = TaskStatus.running
+                            task.permission_prompt = None
+                        self.db.commit()
 
                 case "permission_request":
                     # Claude is asking for permission - update both statuses

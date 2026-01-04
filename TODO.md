@@ -1,6 +1,6 @@
 # TODO
 
-> Auto-updated by Claude Code. Last update: 2026-01-04 18:58
+> Auto-updated by Claude Code. Last update: 2026-01-04 19:34
 
 ### GitButler Hook Integration - "Task as Logical Session" (Priority: High)
 
@@ -88,18 +88,16 @@
 
 ## Completed
 
-### Phase 8: Enhanced UX Features (2026-01-01 to 2026-01-02)
-- ✅ **8.1: Permission Configuration with PermissionRequest Hooks**
-  - Implemented per-task permission policies using PermissionRequest hooks
-  - Per-task Claude config isolation (`/tmp/chorus/config/task-{uuid}/.claude/`)
-  - Permission handler script queries Chorus database for task policies
-  - Predefined profiles: read_only, safe_edit, full_dev, git_only
-  - UI: Permission profile selector in task creation form
-  - Granular control: bash command patterns, file patterns, tool allowlists
-  - Works with `-p` flag (non-interactive mode)
-  - Audit logging: All permission decisions logged to stderr
-  - Files: `services/claude_config.py`, `/tmp/chorus/hooks/permission-handler.py`
-  - Documented in `docs/PERMISSION_HOOKS.md`
+### Phase 8: Enhanced UX Features (2026-01-01 to 2026-01-04)
+- ✅ **8.1: Permission Retry Workflow for `-p` Mode** (Replaced hooks-based approach 2026-01-04)
+  - Implemented detection-based permission management compatible with `-p` mode
+  - Permission denial detection via regex patterns in JSON events
+  - Database fields: `allowed_tools`, `pending_permission` in Task model
+  - API endpoint: `/api/tasks/{task_id}/approve-permission-and-retry`
+  - Workflow: Detect denial → Prompt user → Add to `--allowedTools` → Retry with `--resume`
+  - Pattern support: `Bash(git:*)`, `Bash(git commit:*)`, `Edit`, `Write`, etc.
+  - Files: `services/json_parser.py::detect_permission_denial()`, `services/tmux.py` (--allowedTools support)
+  - Note: PermissionRequest hooks deprecated (not compatible with `-p` mode)
 - ✅ **8.2: Task Continuation UI**
   - Added `continuation_count` and `prompt_history` fields to Task model
   - Created `/api/tasks/{task_id}/continue` endpoint with `--resume` support
