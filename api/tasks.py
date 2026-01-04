@@ -324,11 +324,16 @@ async def start_task(
     from config import get_config
     config = get_config()
     logger.info(f"Task {task_id}: use_json_mode={config.monitoring.use_json_mode}")
+
+    # Set default allowed tools if not specified (needed for -p mode without --permission-mode delegate)
+    default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
+
     if config.monitoring.use_json_mode:
         tmux.start_claude_json_mode(
             task_id,
             initial_prompt=kickoff_message,
-            context_file=context_file
+            context_file=context_file,
+            allowed_tools=default_tools
         )
     else:
         tmux.start_claude(
@@ -391,11 +396,13 @@ async def restart_claude(
             time.sleep(0.3)
 
             # Start in JSON mode with resume if available
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
             tmux.start_claude_json_mode(
                 task_id,
                 initial_prompt=kickoff_message,
                 context_file=context_file,
-                resume_session_id=task.claude_session_id
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
             )
         else:
             # Use legacy restart method
@@ -605,11 +612,13 @@ async def continue_task(
 
     try:
         if config.monitoring.use_json_mode:
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
             tmux.start_claude_json_mode(
                 task_id,
                 initial_prompt=request.prompt,
                 context_file=context_file,
-                resume_session_id=task.claude_session_id
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
             )
         else:
             # Legacy mode doesn't support resume
@@ -665,12 +674,14 @@ async def send_message(
             # Get context file if it exists
             from services.context import get_context_file, context_exists
             context_file = get_context_file(task_id) if context_exists(task_id) else None
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
 
             tmux.start_claude_json_mode(
                 task_id,
                 initial_prompt=request.message,
                 context_file=context_file,
-                resume_session_id=task.claude_session_id
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
             )
         except SessionNotFoundError:
             raise HTTPException(
