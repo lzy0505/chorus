@@ -6,6 +6,7 @@ Tasks are the primary entity in Chorus. Each task:
 - Can have Claude restarted without losing context
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
@@ -15,12 +16,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session, select
 
 from database import get_db
-from models import Task, TaskStatus, ClaudeStatus
+from models import Task, TaskStatus, ClaudeStatus, PermissionRequest, PermissionRequestStatus
 from services.tmux import TmuxService, SessionExistsError, SessionNotFoundError, get_transcript_dir
 from services.gitbutler import GitButlerService, StackExistsError, GitButlerError
 from services.hooks import HooksService
 from services.context import write_task_context, cleanup_task_context, get_context_file
-from services.ttyd import TtydService
 from services.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -34,6 +34,7 @@ class TaskCreate(BaseModel):
     title: str
     description: str = ""
     priority: int = 0
+    permission_profile: str = "full_dev"  # read_only, safe_edit, full_dev, git_only
 
 
 class TaskUpdate(BaseModel):
@@ -55,8 +56,12 @@ class TaskResponse(BaseModel):
     stack_name: Optional[str]
     tmux_session: Optional[str]
     claude_status: ClaudeStatus
+    claude_session_id: Optional[str]
     claude_restarts: int
+    continuation_count: int
+    prompt_history: str
     permission_prompt: Optional[str]
+    permission_policy: str
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
@@ -96,6 +101,12 @@ class TaskFailRequest(BaseModel):
     delete_stack: bool = False
 
 
+class TaskContinueRequest(BaseModel):
+    """Request body for continuing a task with a new prompt."""
+
+    prompt: str
+
+
 class ActionResponse(BaseModel):
     """Response for action endpoints."""
 
@@ -133,15 +144,21 @@ async def create_task(
     to create the GitButler stack and start Claude.
     """
     logger.info(f"Creating task: {task_data.title}")
+
+    # Get permission policy from profile
+    from services.claude_config import get_permission_profile
+    permission_policy = get_permission_profile(task_data.permission_profile)
+
     task = Task(
         title=task_data.title,
         description=task_data.description,
         priority=task_data.priority,
+        permission_policy=json.dumps(permission_policy),
     )
     db.add(task)
     db.commit()
     db.refresh(task)
-    logger.info(f"Created task {task.id}: {task.title}")
+    logger.info(f"Created task {task.id}: {task.title} (permission_profile={task_data.permission_profile})")
     return task
 
 
@@ -208,6 +225,10 @@ async def delete_task(
             detail="Cannot delete running task. Complete or fail it first.",
         )
 
+    # Cleanup task-specific Claude config
+    from services.claude_config import cleanup_task_claude_config
+    cleanup_task_claude_config(task_id)
+
     db.delete(task)
     db.commit()
 
@@ -248,7 +269,6 @@ async def start_task(
     gitbutler = GitButlerService()
     tmux = TmuxService()
     hooks = HooksService()
-    ttyd = TtydService()
 
     # 1. Create GitButler stack
     stack_name = generate_stack_name(task)
@@ -271,39 +291,49 @@ async def start_task(
         session_id = tmux.get_session_id(task_id)
         task.tmux_session = session_id
 
-    # 3. Start ttyd for web terminal access
-    try:
-        ttyd.start(task_id, session_id)
-    except Exception:
-        pass  # ttyd is optional, don't fail task start if it fails
-
-    # 4. Ensure hooks config exists (shared across all sessions)
+    # 3. Ensure hooks config exists (shared across all sessions)
     hooks.ensure_hooks()
 
-    # 5. Update task status
+    # Note: We no longer use PermissionRequest hooks (not compatible with -p mode)
+    # Permission management is now handled via --allowedTools flag and retry workflow
+
+    # 4. Update task status
     task.status = TaskStatus.running
     task.claude_status = ClaudeStatus.starting
     task.started_at = datetime.now(timezone.utc)
+
+    # Add initial user prompt to log
+    kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
+    timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    task.last_output = f"[{timestamp}] 👤 You: {kickoff_message}"
+
+    # Record initial prompt in history
+    prompts = [kickoff_message]
+    task.prompt_history = json.dumps(prompts)
 
     db.add(task)
     db.commit()
     db.refresh(task)
 
-    # 6. Write task context to /tmp (not in project directory)
+    # 5. Write task context to /tmp (not in project directory)
     context_file = write_task_context(task, user_prompt=request.initial_prompt)
 
-    # 7. Start Claude in tmux with context injected via --append-system-prompt
-    # Pass initial_prompt to send as a message (or default kickoff if None)
-    kickoff_message = request.initial_prompt or "Complete the HIGHEST PRIORITY task."
+    # 6. Start Claude in tmux with context injected via --append-system-prompt
 
     # Use JSON mode if enabled in config
     from config import get_config
     config = get_config()
+    logger.info(f"Task {task_id}: use_json_mode={config.monitoring.use_json_mode}")
+
+    # Set default allowed tools if not specified (needed for -p mode without --permission-mode delegate)
+    default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
+
     if config.monitoring.use_json_mode:
         tmux.start_claude_json_mode(
             task_id,
             initial_prompt=kickoff_message,
-            context_file=context_file
+            context_file=context_file,
+            allowed_tools=default_tools
         )
     else:
         tmux.start_claude(
@@ -366,11 +396,13 @@ async def restart_claude(
             time.sleep(0.3)
 
             # Start in JSON mode with resume if available
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
             tmux.start_claude_json_mode(
                 task_id,
                 initial_prompt=kickoff_message,
                 context_file=context_file,
-                resume_session_id=task.json_session_id
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
             )
         else:
             # Use legacy restart method
@@ -397,6 +429,213 @@ async def restart_claude(
     return ActionResponse(
         status="ok",
         message=f"Claude restarted for task {task_id} (restart #{task.claude_restarts})",
+        task_id=task_id,
+    )
+
+
+class PermissionApprovalRequest(BaseModel):
+    """Request to approve adding a permission to allowedTools."""
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str  # Tool name (e.g., "Bash", "Write")
+    pattern: Optional[str] = None  # Optional pattern (e.g., "git:*", "git commit:*")
+
+
+@router.post("/{task_id}/approve-permission-and-retry")
+async def approve_permission_and_retry(
+    task_id: UUID,
+    approval: PermissionApprovalRequest,
+    db: Session = Depends(get_db),
+) -> ActionResponse:
+    """Approve adding a permission to --allowedTools and retry Claude with updated permissions.
+
+    This implements the -p mode permission workflow:
+    1. Claude hits permission denial
+    2. User approves adding permission to allowedTools
+    3. Resume Claude session with updated --allowedTools and a message saying "You now have permission. Try again."
+
+    Args:
+        task_id: Task UUID
+        approval: Tool and optional pattern to add to allowed list
+
+    Returns:
+        ActionResponse with status
+    """
+    logger.info(f"Approving permission for task {task_id}: {approval.tool}")
+    task = get_task_or_404(db, task_id)
+
+    if task.status != TaskStatus.waiting:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task is {task.status}, can only approve permissions for waiting tasks",
+        )
+
+    # Build permission string (e.g., "Bash(git:*)" or just "Write")
+    if approval.pattern:
+        permission_str = f"{approval.tool}({approval.pattern})"
+    else:
+        permission_str = approval.tool
+
+    # Add to allowed_tools list
+    current_allowed = task.allowed_tools.split(",") if task.allowed_tools else []
+    if permission_str not in current_allowed:
+        current_allowed.append(permission_str)
+        task.allowed_tools = ",".join(current_allowed)
+        logger.info(f"Added {permission_str} to allowed tools: {task.allowed_tools}")
+
+    # Clear pending permission
+    task.pending_permission = None
+    task.permission_prompt = None
+
+    db.add(task)
+    db.commit()
+
+    # Restart Claude with updated permissions and a retry message
+    from config import get_config
+    config = get_config()
+    tmux = TmuxService()
+
+    # Get context file
+    context_file = get_context_file(task_id)
+
+    # Build retry message
+    retry_message = f"You now have permission to use {permission_str}. Please try again."
+
+    try:
+        if config.monitoring.use_json_mode:
+            import subprocess
+            import time
+            session_id = tmux.get_session_id(task_id)
+
+            # Send Ctrl-C to interrupt
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.2)
+            subprocess.run(["tmux", "send-keys", "-t", session_id, "C-c"], check=False)
+            time.sleep(0.3)
+
+            # Restart with --resume and updated allowedTools
+            logger.info(f"Restarting Claude with allowed_tools: {task.allowed_tools}")
+
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=retry_message,
+                context_file=context_file,
+                resume_session_id=task.claude_session_id,
+                allowed_tools=task.allowed_tools,
+            )
+        else:
+            raise HTTPException(
+                status_code=501,
+                detail="Permission retry only supported in JSON mode",
+            )
+    except SessionNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tmux session for task {task_id} not found",
+        )
+
+    # Update task state
+    task.status = TaskStatus.running
+    task.claude_status = ClaudeStatus.starting
+    task.claude_restarts += 1
+
+    db.add(task)
+    db.commit()
+
+    logger.info(f"Permission approved and Claude restarted for task {task_id}")
+    return ActionResponse(
+        status="ok",
+        message=f"Permission approved ({permission_str}) and Claude restarted",
+        task_id=task_id,
+    )
+
+
+@router.post("/{task_id}/continue", response_model=ActionResponse)
+async def continue_task(
+    task_id: UUID,
+    request: TaskContinueRequest,
+    db: Session = Depends(get_db),
+) -> ActionResponse:
+    """Continue a task with a new prompt using --resume.
+
+    This is used for multi-step tasks where Claude has stopped after completing
+    one step. Uses the saved claude_session_id to resume the session.
+
+    The task must be running but Claude must be stopped.
+    """
+    logger.info(f"Continuing task {task_id} with new prompt: {request.prompt[:50]}...")
+    task = get_task_or_404(db, task_id)
+
+    # Validate task state
+    if task.status != TaskStatus.running:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task is {task.status}, can only continue running tasks",
+        )
+
+    if task.claude_status != ClaudeStatus.stopped:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Claude is {task.claude_status}, can only continue when stopped",
+        )
+
+    if not task.claude_session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No session ID available. Use 'Restart Claude' instead.",
+        )
+
+    # Update prompt history
+    try:
+        prompts = json.loads(task.prompt_history) if task.prompt_history else []
+    except json.JSONDecodeError:
+        prompts = []
+
+    prompts.append(request.prompt)
+    task.prompt_history = json.dumps(prompts)
+    task.continuation_count += 1
+
+    # Update task state
+    task.claude_status = ClaudeStatus.starting
+    task.permission_prompt = None
+
+    db.add(task)
+    db.commit()
+
+    # Get context file and start Claude with resume
+    context_file = get_context_file(task_id)
+    tmux = TmuxService()
+
+    # Use JSON mode if enabled in config
+    from config import get_config
+    config = get_config()
+
+    try:
+        if config.monitoring.use_json_mode:
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
+            tmux.start_claude_json_mode(
+                task_id,
+                initial_prompt=request.prompt,
+                context_file=context_file,
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
+            )
+        else:
+            # Legacy mode doesn't support resume
+            raise HTTPException(
+                status_code=400,
+                detail="Task continuation requires JSON mode to be enabled",
+            )
+    except SessionNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tmux session for task {task_id} not found",
+        )
+
+    logger.info(f"Task {task_id} continued with prompt (continuation #{task.continuation_count})")
+    return ActionResponse(
+        status="ok",
+        message=f"Task continued with new prompt (continuation #{task.continuation_count})",
         task_id=task_id,
     )
 
@@ -429,18 +668,20 @@ async def send_message(
     from config import get_config
     config = get_config()
 
-    if config.monitoring.use_json_mode and task.json_session_id:
+    if config.monitoring.use_json_mode and task.claude_session_id:
         # In JSON mode, use --resume to continue the session
         try:
             # Get context file if it exists
             from services.context import get_context_file, context_exists
             context_file = get_context_file(task_id) if context_exists(task_id) else None
+            default_tools = task.allowed_tools if task.allowed_tools else "Read,Write,Edit,Bash,Grep,Glob,LSP"
 
             tmux.start_claude_json_mode(
                 task_id,
                 initial_prompt=request.message,
                 context_file=context_file,
-                resume_session_id=task.json_session_id
+                resume_session_id=task.claude_session_id,
+                allowed_tools=default_tools
             )
         except SessionNotFoundError:
             raise HTTPException(
@@ -531,11 +772,7 @@ async def complete_task(
         )
 
     tmux = TmuxService()
-    ttyd = TtydService()
     gitbutler = GitButlerService()
-
-    # Stop ttyd (release port)
-    ttyd.stop_if_running(task_id)
 
     # Call GitButler stop hook before cleanup
     transcript_dir = get_transcript_dir(task_id)
@@ -600,11 +837,7 @@ async def fail_task(
         )
 
     tmux = TmuxService()
-    ttyd = TtydService()
     gitbutler = GitButlerService()
-
-    # Stop ttyd (release port)
-    ttyd.stop_if_running(task_id)
 
     # Kill tmux session if it exists
     try:
@@ -670,4 +903,72 @@ async def get_task_output(
         "task_id": task_id,
         "output": output,
         "lines": lines,
+    }
+
+
+# Permission Request endpoints
+
+
+class PermissionDecision(BaseModel):
+    """Request body for permission decision."""
+    approved: bool
+
+
+@router.get("/{task_id}/permissions/pending")
+def get_pending_permissions(task_id: UUID, db: Session = Depends(get_db)):
+    """Get all pending permission requests for a task."""
+    statement = select(PermissionRequest).where(
+        PermissionRequest.task_id == task_id,
+        PermissionRequest.status == PermissionRequestStatus.pending
+    )
+    requests = db.exec(statement).all()
+
+    return [
+        {
+            "id": req.id,
+            "task_id": str(req.task_id),
+            "tool_name": req.tool_name,
+            "tool_input": json.loads(req.tool_input),
+            "created_at": req.created_at.isoformat(),
+        }
+        for req in requests
+    ]
+
+
+@router.post("/{task_id}/permissions/{permission_id}/decide")
+def decide_permission(
+    task_id: UUID,
+    permission_id: int,
+    decision: PermissionDecision,
+    db: Session = Depends(get_db)
+):
+    """Approve or deny a permission request."""
+    # Get the permission request
+    request = db.get(PermissionRequest, permission_id)
+
+    if not request:
+        raise HTTPException(status_code=404, detail="Permission request not found")
+
+    if request.task_id != task_id:
+        raise HTTPException(status_code=400, detail="Permission request does not belong to this task")
+
+    if request.status != PermissionRequestStatus.pending:
+        raise HTTPException(status_code=400, detail="Permission request already decided")
+
+    # Update the request status
+    request.status = PermissionRequestStatus.approved if decision.approved else PermissionRequestStatus.denied
+    request.decided_at = datetime.now(timezone.utc)
+
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+
+    logger.info(f"Permission request #{permission_id} for task {task_id} decided: {request.status}")
+
+    return {
+        "id": request.id,
+        "task_id": str(request.task_id),
+        "tool_name": request.tool_name,
+        "status": request.status,
+        "decided_at": request.decided_at.isoformat() if request.decided_at else None,
     }

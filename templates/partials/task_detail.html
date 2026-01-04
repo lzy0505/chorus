@@ -3,12 +3,13 @@
 <!-- Auto-refresh wrapper for task info (excludes terminal) -->
 <div id="task-info-refresh"
      {% if task.status.value in ['running', 'waiting'] %}
-     hx-ext="morph"
      hx-get="/dashboard/tasks/{{ task.id }}"
      hx-trigger="every 3s"
      hx-target="#task-info-refresh"
      hx-select="#task-info-refresh"
-     hx-swap="morph:outerHTML"
+     hx-swap="outerHTML"
+     hx-on::before-swap="event.target.parentElement.classList.add('no-animate')"
+     hx-on::after-swap="requestAnimationFrame(() => requestAnimationFrame(() => event.target.parentElement.classList.remove('no-animate')))"
      {% endif %}>
 
 <div class="panel-header">
@@ -35,11 +36,123 @@
             <span class="value">{{ task.claude_restarts }}</span>
         </div>
         <div class="info-item">
+            <span class="label">Continuations:</span>
+            <span class="value">{{ task.continuation_count }}</span>
+        </div>
+        {% if task.claude_session_id %}
+        <div class="info-item">
+            <span class="label">Session ID:</span>
+            <span class="value" style="font-size: 0.8em; font-family: monospace;">{{ task.claude_session_id[:16] }}...</span>
+        </div>
+        {% endif %}
+        <div class="info-item">
             <span class="label">Created:</span>
             <span class="value">{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
         </div>
     </div>
 </div>
+
+<!-- Permission Policy -->
+{% if task.permission_policy %}
+<div class="permission-policy-section">
+    <div class="permission-policy-header">
+        <span>🔒 Permission Policy</span>
+    </div>
+    <div class="permission-policy-content">
+        {% set policy = task.permission_policy | from_json %}
+
+        <!-- Allowed Tools -->
+        {% if policy.allowed_tools %}
+        <div class="policy-item">
+            <span class="policy-label">Allowed Tools:</span>
+            <div class="policy-value">
+                {% for tool in policy.allowed_tools %}
+                <span class="tool-badge">{{ tool }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- File Patterns -->
+        {% if policy.file_patterns %}
+        <div class="policy-item">
+            <span class="policy-label">File Access:</span>
+            <div class="policy-value">
+                {% if policy.file_patterns.allow %}
+                <div class="pattern-group">
+                    <span class="pattern-type allow">✓ Allow:</span>
+                    {% for pattern in policy.file_patterns.allow %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if policy.file_patterns.deny %}
+                <div class="pattern-group">
+                    <span class="pattern-type deny">✗ Deny:</span>
+                    {% for pattern in policy.file_patterns.deny %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Bash Patterns -->
+        {% if policy.bash_patterns %}
+        <div class="policy-item">
+            <span class="policy-label">Bash Commands:</span>
+            <div class="policy-value">
+                {% if policy.bash_patterns.allow %}
+                <div class="pattern-group">
+                    <span class="pattern-type allow">✓ Allow:</span>
+                    {% for pattern in policy.bash_patterns.allow %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if policy.bash_patterns.deny %}
+                <div class="pattern-group">
+                    <span class="pattern-type deny">✗ Deny:</span>
+                    {% for pattern in policy.bash_patterns.deny %}
+                    <code class="pattern">{{ pattern }}</code>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Auto-Approve Status -->
+        <div class="policy-item">
+            <span class="policy-label">Auto-Approve:</span>
+            <span class="policy-value">
+                {% if policy.auto_approve %}
+                <span class="auto-approve-yes">✓ Enabled</span>
+                {% else %}
+                <span class="auto-approve-no">✗ Disabled</span>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Prompt History (if any) -->
+{% if task.prompt_history %}
+<div class="prompt-history-section">
+    <div class="prompt-history-header">Prompt History</div>
+    <div class="prompt-history-content">
+        {% set prompts = task.prompt_history | from_json %}
+        {% for prompt in prompts %}
+        <div class="prompt-item">
+            <span class="prompt-number">#{{ loop.index }}</span>
+            <span class="prompt-text">{{ prompt }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Action Buttons -->
 <div class="task-actions">
@@ -67,6 +180,23 @@
     </button>
 
     {% elif task.status.value == 'running' %}
+    {% if task.claude_status.value == 'stopped' and task.claude_session_id %}
+    <!-- Continue Task: Claude stopped, can resume with new prompt -->
+    <div class="continue-task-form">
+        <input type="text"
+               id="continue-prompt-{{ task.id }}"
+               placeholder="Next prompt to continue task..."
+               class="message-input">
+        <button class="btn btn-primary"
+                hx-post="/dashboard/tasks/{{ task.id }}/continue"
+                hx-target="#task-detail"
+                hx-swap="innerHTML"
+                hx-include="#continue-prompt-{{ task.id }}"
+                hx-vals='js:{prompt: document.getElementById("continue-prompt-{{ task.id }}").value}'>
+            Continue Task
+        </button>
+    </div>
+    {% endif %}
     <button class="btn btn-secondary"
             hx-post="/dashboard/tasks/{{ task.id }}/restart-claude"
             hx-target="#task-detail"
@@ -106,7 +236,26 @@
         Fail
     </button>
     {% if task.permission_prompt %}
-    <div class="permission-prompt">{{ task.permission_prompt }}</div>
+    <div class="permission-box">
+        <div class="permission-prompt">
+            <strong>⚠️ Permission Required:</strong><br>
+            {{ task.permission_prompt }}
+        </div>
+        <div class="permission-actions">
+            <button class="btn btn-success"
+                    hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=true"
+                    hx-target="#task-detail"
+                    hx-swap="innerHTML">
+                ✓ Approve
+            </button>
+            <button class="btn btn-danger"
+                    hx-post="/dashboard/tasks/{{ task.id }}/respond?confirm=false"
+                    hx-target="#task-detail"
+                    hx-swap="innerHTML">
+                ✗ Deny
+            </button>
+        </div>
+    </div>
     {% endif %}
 
     {% elif task.status.value == 'completed' or task.status.value == 'failed' %}
@@ -127,40 +276,132 @@
 
 </div><!-- end task-info-refresh -->
 
-<!-- Terminal (for running tasks) - outside refresh zone -->
+<!-- Live Output (for running tasks) - auto-refreshing -->
 {% if task.status.value in ['running', 'waiting'] %}
-    {% if tmux_session_exists %}
-    <div class="terminal-section">
-        <div class="terminal-header">
-            <span>Terminal</span>
-            <a href="http://localhost:{{ 7681 + task.id }}" target="_blank" class="btn btn-small">
-                Open in New Tab
-            </a>
-        </div>
-        <iframe
-            id="terminal-iframe-{{ task.id }}"
-            src="http://localhost:{{ 7681 + task.id }}"
-            class="terminal-iframe"
-            title="Task Terminal">
-        </iframe>
+<div class="output-section">
+    <div class="output-header">Live Output (JSON Events)</div>
+    <div class="output-content json-events-container" id="output-content-{{ task.id }}"
+         hx-get="/dashboard/tasks/{{ task.id }}/output"
+         hx-trigger="every 2s"
+         hx-swap="innerHTML"
+         hx-on::before-swap="
+            const el = event.target;
+            const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+            el.dataset.wasAtBottom = wasAtBottom;
 
-        <!-- Send Message Form -->
-        <form class="send-form" hx-post="/dashboard/tasks/{{ task.id }}/send" hx-swap="none">
-            <input type="text"
-                   name="message"
-                   placeholder="Send a message to Claude (Ctrl/Cmd+Enter to send)"
-                   class="message-input"
-                   autocomplete="off">
-            <button type="submit" class="btn btn-primary">Send</button>
-        </form>
+            // Save current scroll position for non-bottom cases
+            if (!wasAtBottom) {
+                el.dataset.savedScrollTop = el.scrollTop.toString();
+            }
+
+            // Save expanded event indices
+            const expandedEvents = [];
+            const events = el.querySelectorAll('.json-event');
+            events.forEach((evt, index) => {
+                if (evt.classList.contains('expanded')) {
+                    expandedEvents.push(index);
+                }
+            });
+            el.dataset.expandedEvents = JSON.stringify(expandedEvents);
+
+            // Hide container during swap to prevent flashing
+            el.style.opacity = '0';
+            el.classList.add('no-animate');
+         "
+         hx-on::after-swap="
+            const el = event.target;
+
+            // Keep no-animate active while we restore state
+            // Restore expanded event states
+            if (el.dataset.expandedEvents) {
+                const expandedIndices = JSON.parse(el.dataset.expandedEvents);
+                const events = el.querySelectorAll('.json-event');
+                expandedIndices.forEach(index => {
+                    if (events[index]) {
+                        events[index].classList.add('expanded');
+                    }
+                });
+            }
+
+            // Restore scroll position
+            if (el.dataset.wasAtBottom === 'true') {
+                el.scrollTop = el.scrollHeight;
+            } else if (el.dataset.savedScrollTop) {
+                el.scrollTop = parseInt(el.dataset.savedScrollTop, 10);
+            }
+
+            // Force a reflow to apply all changes
+            void el.offsetHeight;
+
+            // Show container and re-enable animations
+            el.style.opacity = '1';
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    el.classList.remove('no-animate');
+                });
+            });
+         ">
+        {% if task.last_output %}
+            {% set events = task.last_output.strip().split('\n') %}
+            {% for event_line in events %}
+                {% if event_line.strip().startswith('{') %}
+                    {% set event = event_line | from_json %}
+                    <div class="json-event event-{{ event.type }}" onclick="this.classList.toggle('expanded')">
+                        <div class="event-summary">
+                            <span class="event-type">{{ event.type }}</span>
+                            <span class="event-details">
+                                {% if event.type == 'session_start' %}
+                                    Session: {{ event.session_id[:16] if event.session_id else 'N/A' }}...
+                                {% elif event.type == 'user' %}
+                                    {% if event.message.content is iterable and event.message.content is not string %}
+                                        {{ event.message.content[0].text[:60] if event.message.content and event.message.content[0].text else 'User input' }}...
+                                    {% else %}
+                                        User input
+                                    {% endif %}
+                                {% elif event.type == 'tool_use' %}
+                                    <strong>{{ event.toolName }}</strong>
+                                    {% if event.toolInput.file_path %}
+                                        → {{ event.toolInput.file_path }}
+                                    {% elif event.toolInput.command %}
+                                        → <code>{{ event.toolInput.command[:40] }}...</code>
+                                    {% endif %}
+                                {% elif event.type == 'tool_result' %}
+                                    {% if event.isError %}
+                                        <span class="error-badge">ERROR</span>
+                                    {% else %}
+                                        <span class="success-badge">SUCCESS</span>
+                                    {% endif %}
+                                {% elif event.type == 'text' %}
+                                    {{ event.text[:60] if event.text else '' }}...
+                                {% elif event.type == 'assistant' %}
+                                    Assistant response ({{ event.message.content | length }} blocks)
+                                {% elif event.type == 'result' %}
+                                    {% if event.usage %}
+                                        Tokens: {{ event.usage.input_tokens }}in / {{ event.usage.output_tokens }}out
+                                    {% else %}
+                                        Completed
+                                    {% endif %}
+                                {% elif event.type == 'permission_request' %}
+                                    ⚠️ {{ event.prompt[:50] }}...
+                                {% elif event.type == 'error' %}
+                                    <span class="error-badge">{{ event.error.type }}</span> {{ event.error.message[:40] }}...
+                                {% else %}
+                                    {{ event.type }}
+                                {% endif %}
+                            </span>
+                            <span class="expand-icon">▶</span>
+                        </div>
+                        <div class="event-full-data">
+                            <pre>{{ event | tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <div class="no-events">Waiting for output...</div>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="terminal-section">
-        <div class="terminal-error">
-            <strong>Error:</strong> tmux session not found. The terminal session should be alive throughout the task lifecycle.
-        </div>
-    </div>
-    {% endif %}
+</div>
 {% endif %}
 
 </div><!-- end task-detail-content -->

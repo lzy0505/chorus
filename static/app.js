@@ -72,6 +72,19 @@
             }
         });
 
+        // Also handle errors to re-enable button
+        document.addEventListener('htmx:responseError', function(evt) {
+            const target = evt.detail.elt;
+            if (target.classList.contains('btn')) {
+                const originalText = target.getAttribute('data-original-text');
+                if (originalText) {
+                    target.textContent = originalText;
+                    target.removeAttribute('data-original-text');
+                }
+                target.disabled = false;
+            }
+        });
+
         // Show success flash on successful requests
         document.addEventListener('htmx:afterOnLoad', function(evt) {
             if (evt.detail.successful && evt.detail.xhr.status === 200) {

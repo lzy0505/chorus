@@ -56,15 +56,27 @@ class Task(SQLModel, table=True):
 
     # tmux process
     tmux_session: Optional[str] = Field(default=None)  # e.g., "task-{uuid}"
+    ttyd_port: Optional[int] = Field(default=None)  # Web terminal port (assigned when task starts)
 
     # Claude session state (ephemeral, can be restarted)
     # Note: task.id (UUID) is used for GitButler hooks (persistent)
     # claude_session_id is used for Claude's --resume (changes on restart)
     claude_session_id: Optional[str] = Field(default=None)  # For --resume, changes on Claude restart
     claude_status: ClaudeStatus = Field(default=ClaudeStatus.stopped)
+    claude_activity: Optional[str] = Field(default=None)  # Current activity description (e.g., "Editing main.py")
     claude_restarts: int = Field(default=0)
-    last_output: str = Field(default="")  # Last ~2000 chars of terminal output
+    continuation_count: int = Field(default=0)  # How many times task was continued with new prompts
+    prompt_history: str = Field(default="")  # JSON array of prompts sent to Claude
+    last_output: str = Field(default="")  # Last ~10000 chars of formatted log output
     permission_prompt: Optional[str] = Field(default=None)
+
+    # Permission policy (task-specific, enforced via PermissionRequest hooks)
+    permission_policy: str = Field(default="")  # JSON object with allowed tools, patterns, auto-approve rules
+
+    # Permission retry system for -p mode
+    # When Claude hits permission denial in -p mode, we detect it and offer to add to --allowedTools
+    allowed_tools: str = Field(default="")  # Comma-separated list of allowed tools (e.g., "Bash(git:*),Edit,Write")
+    pending_permission: Optional[str] = Field(default=None)  # JSON: tool/command that was just denied and needs approval
 
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -94,3 +106,22 @@ class DocumentReference(SQLModel, table=True):
     end_line: int
     note: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PermissionRequestStatus(str, Enum):
+    """Permission request status."""
+    pending = "pending"      # Waiting for user decision
+    approved = "approved"    # User approved
+    denied = "denied"        # User denied
+    timeout = "timeout"      # Request timed out
+
+
+class PermissionRequest(SQLModel, table=True):
+    """A permission request from Claude that needs web UI approval."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: UUID = Field(foreign_key="task.id")
+    tool_name: str
+    tool_input: str  # JSON string of tool input parameters
+    status: PermissionRequestStatus = Field(default=PermissionRequestStatus.pending)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    decided_at: Optional[datetime] = Field(default=None)

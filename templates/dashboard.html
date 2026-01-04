@@ -4,33 +4,217 @@
 <div class="dashboard" hx-ext="sse" sse-connect="/api/events">
     <!-- New Task Form -->
     <div class="panel new-task-panel">
-        <form hx-post="/dashboard/tasks" hx-target="#task-list" hx-swap="afterbegin" hx-on::after-request="this.reset()" class="new-task-form">
+        <form method="POST" action="/dashboard/tasks" class="new-task-form" onsubmit="handleTaskSubmit(event)">
             <input type="text" name="title" placeholder="Task title (e.g., 'Add user authentication')" class="task-input" required>
             <textarea name="description" placeholder="Task description (optional)" class="task-textarea" rows="2"></textarea>
+            <div class="permission-profile-row">
+                <label for="permission_profile" class="profile-label">Permissions:</label>
+                <select name="permission_profile" id="permission_profile" class="profile-select">
+                    <option value="full_dev" selected>Full Dev (recommended)</option>
+                    <option value="safe_edit">Safe Edit (read + file edits)</option>
+                    <option value="read_only">Read Only (analysis)</option>
+                    <option value="git_only">Git Only</option>
+                </select>
+                <span class="profile-hint">Controls what tools Claude can use</span>
+            </div>
             <button type="submit" class="btn btn-primary">+ Add Task</button>
         </form>
     </div>
 
+    <script>
+    function handleTaskSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        // Show loading state
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        btn.textContent = 'Adding...';
+        btn.disabled = true;
+
+        fetch('/dashboard/tasks', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            // Task created successfully, reload to show it
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error creating task:', error);
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert('Failed to create task. Please try again.');
+        });
+    }
+    </script>
+
+    <!-- Collapsed Sidebar (shown when task panel is collapsed) -->
+    <div class="collapsed-sidebar" id="collapsed-sidebar" style="display: none;">
+        <button class="expand-button" onclick="toggleTaskPanel()" title="Expand task list">
+            <span>▶</span>
+        </button>
+    </div>
+
     <!-- Task List -->
-    <div class="panel task-panel">
+    <div class="panel task-panel" id="task-panel">
         <div class="panel-header">
-            <span>Tasks</span>
+            <div class="panel-header-content">
+                <span>Tasks</span>
+                <button class="panel-toggle" onclick="toggleTaskPanel()" title="Toggle task list">
+                    <span class="toggle-icon">◀</span>
+                </button>
+            </div>
             <div class="filter-tabs" onclick="if(event.target.classList.contains('tab')){this.querySelector('.active')?.classList.remove('active');event.target.classList.add('active')}">
-                <button class="tab active" hx-get="/dashboard/tasks" hx-target="#task-list">All</button>
-                <button class="tab" hx-get="/dashboard/tasks?status=running" hx-target="#task-list">Running</button>
-                <button class="tab" hx-get="/dashboard/tasks?status=pending" hx-target="#task-list">Pending</button>
-                <button class="tab" hx-get="/dashboard/tasks?status=completed" hx-target="#task-list">Completed</button>
+                <button class="tab active" hx-get="/dashboard/tasks" hx-target="#task-list" hx-swap="innerHTML">All</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=running" hx-target="#task-list" hx-swap="innerHTML">Running</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=pending" hx-target="#task-list" hx-swap="innerHTML">Pending</button>
+                <button class="tab" hx-get="/dashboard/tasks?status=completed" hx-target="#task-list" hx-swap="innerHTML">Completed</button>
             </div>
         </div>
-        <div id="task-list" hx-get="/dashboard/tasks" hx-trigger="load, sse:task_update">
+        <div id="task-list"
+             hx-get="/dashboard/tasks"
+             hx-trigger="load, sse:task_update"
+             hx-swap="innerHTML"
+             hx-on::before-swap="event.target.classList.add('no-animate')"
+             hx-on::after-swap="requestAnimationFrame(() => requestAnimationFrame(() => event.target.classList.remove('no-animate')))">
             <p class="loading">Loading tasks...</p>
         </div>
     </div>
+
+    <script>
+    function toggleTaskPanel() {
+        const panel = document.getElementById('task-panel');
+        const sidebar = document.getElementById('collapsed-sidebar');
+        const dashboard = document.querySelector('.dashboard');
+
+        if (panel.style.display === 'none') {
+            // Expand
+            panel.style.display = 'block';
+            sidebar.style.display = 'none';
+            dashboard.classList.remove('collapsed-mode');
+        } else {
+            // Collapse
+            panel.style.display = 'none';
+            sidebar.style.display = 'block';
+            dashboard.classList.add('collapsed-mode');
+        }
+    }
+    </script>
 
     <!-- Task Detail (shown when task selected) -->
     <div class="panel detail-panel" id="task-detail">
         <div class="panel-header">Task Detail</div>
         <p class="muted">Select a task to view details</p>
     </div>
+
+    <!-- Permission Request Modal -->
+    <div id="permission-modal" class="permission-modal" style="display: none;">
+        <div class="permission-modal-content">
+            <h3>🔐 Permission Request</h3>
+            <div id="permission-details"></div>
+            <div class="permission-buttons">
+                <button class="btn btn-danger" onclick="denyPermission()">Deny</button>
+                <button class="btn btn-primary" onclick="approvePermission()">Approve</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Store current permission request
+    let currentPermissionRequest = null;
+
+    // Listen for permission_request SSE events
+    document.body.addEventListener('sse:permission_request', function(e) {
+        const data = JSON.parse(e.detail.data);
+        console.log('Permission request received:', data);
+
+        // Fetch full permission details
+        fetch(`/api/tasks/${data.task_id}/permissions/pending`)
+            .then(response => response.json())
+            .then(requests => {
+                if (requests.length > 0) {
+                    // Show the first pending request
+                    const request = requests[0];
+                    currentPermissionRequest = request;
+                    showPermissionModal(request);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching permission details:', error);
+            });
+    });
+
+    function showPermissionModal(request) {
+        const modal = document.getElementById('permission-modal');
+        const details = document.getElementById('permission-details');
+
+        // Format tool input for display
+        let inputDisplay = '';
+        if (request.tool_name === 'Write') {
+            inputDisplay = `<strong>File:</strong> ${request.tool_input.file_path}`;
+        } else if (request.tool_name === 'Bash') {
+            inputDisplay = `<strong>Command:</strong> <code>${request.tool_input.command}</code>`;
+        } else {
+            inputDisplay = `<pre>${JSON.stringify(request.tool_input, null, 2)}</pre>`;
+        }
+
+        details.innerHTML = `
+            <p><strong>Tool:</strong> ${request.tool_name}</p>
+            <p>${inputDisplay}</p>
+            <p class="muted">Created: ${new Date(request.created_at).toLocaleString()}</p>
+        `;
+
+        modal.style.display = 'flex';
+    }
+
+    function approvePermission() {
+        if (!currentPermissionRequest) return;
+
+        fetch(`/api/tasks/${currentPermissionRequest.task_id}/permissions/${currentPermissionRequest.id}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved: true })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Permission approved:', data);
+            hidePermissionModal();
+        })
+        .catch(error => {
+            console.error('Error approving permission:', error);
+            alert('Failed to approve permission');
+        });
+    }
+
+    function denyPermission() {
+        if (!currentPermissionRequest) return;
+
+        fetch(`/api/tasks/${currentPermissionRequest.task_id}/permissions/${currentPermissionRequest.id}/decide`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved: false })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Permission denied:', data);
+            hidePermissionModal();
+        })
+        .catch(error => {
+            console.error('Error denying permission:', error);
+            alert('Failed to deny permission');
+        });
+    }
+
+    function hidePermissionModal() {
+        const modal = document.getElementById('permission-modal');
+        modal.style.display = 'none';
+        currentPermissionRequest = null;
+    }
+    </script>
 </div>
 {% endblock %}

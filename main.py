@@ -195,6 +195,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+# Add custom Jinja filters
+import json
+templates.env.filters["from_json"] = lambda s: json.loads(s) if s else []
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):

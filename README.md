@@ -1,16 +1,17 @@
 # Chorus
 
-A lightweight orchestration system for managing multiple Claude Code sessions working on a single large project.
+**Task-centric orchestration for multiple Claude Code sessions**
+
+Manage multiple Claude Code tasks on a single large project. Each task gets its own tmux process + GitButler stack with automatic commits, session resumption, and real-time monitoring.
 
 ## Features
 
-- **Task Management**: Create, prioritize, and track tasks with their own tmux processes
-- **GitButler Integration**: Each task gets its own stack (virtual branch) with auto-commits
-- **JSON Event Monitoring**: Parse Claude's structured JSON output for deterministic status detection
-- **Session Resilience**: Restart Claude Code sessions without losing task context, with `--resume` support
-- **Document Management**: View and reference markdown files as project instructions and context
-- **Real-time Dashboard**: Web UI with live status updates and permission request handling
-- **Desktop Notifications**: OS-level alerts when Claude needs attention
+- **Task Isolation**: Each task runs in its own tmux process with dedicated GitButler stack
+- **Auto-Commits**: GitButler hooks automatically commit file edits to the correct stack
+- **Session Resumption**: Continue tasks with `--resume` across Claude restarts
+- **JSON Monitoring**: Deterministic status detection via `--output-format stream-json`
+- **Real-time Dashboard**: Web UI with live updates, JSON event viewer, permission handling
+- **Permission Management**: Detection-based workflow with `--allowedTools` for non-interactive mode
 
 ## Requirements
 

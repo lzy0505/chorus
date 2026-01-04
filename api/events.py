@@ -9,6 +9,7 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api", tags=["events"])
 
@@ -46,6 +47,7 @@ async def sse_endpoint():
     - task_update: Task status changed
     - claude_status: Claude status changed
     - commit: New commit to a stack
+    - permission_request: New permission request awaiting approval
     """
     return StreamingResponse(
         event_generator(),
@@ -56,3 +58,16 @@ async def sse_endpoint():
             "X-Accel-Buffering": "no",
         },
     )
+
+
+class EventTrigger(BaseModel):
+    """Request body for triggering SSE events."""
+    event: str
+    data: dict
+
+
+@router.post("/events/trigger")
+async def trigger_event(trigger: EventTrigger):
+    """Trigger an SSE event (webhook endpoint for permission handler)."""
+    await publish_event(trigger.event, trigger.data)
+    return {"status": "ok"}

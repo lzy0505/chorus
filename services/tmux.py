@@ -203,7 +203,7 @@ class TmuxService:
 
     def start_claude(
         self,
-        task_id: int,
+        task_id: UUID,
         initial_prompt: Optional[str] = None,
         context_file: Optional[Path] = None,
     ) -> None:
@@ -249,12 +249,12 @@ class TmuxService:
         else:
             claude_cmd = f"{env_prefix} claude"
 
-        # If there's an initial prompt, pass it directly to Claude as an argument
+        # If there's an initial prompt, pass it using -p flag
         # This is more reliable than waiting and sending keys via tmux
         if initial_prompt:
             # Escape the prompt for shell
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            claude_cmd += f' "{escaped_prompt}"'
+            claude_cmd += f' -p "{escaped_prompt}"'
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
@@ -263,10 +263,11 @@ class TmuxService:
 
     def start_claude_json_mode(
         self,
-        task_id: int,
+        task_id: UUID,
         initial_prompt: Optional[str] = None,
         context_file: Optional[Path] = None,
         resume_session_id: Optional[str] = None,
+        allowed_tools: Optional[str] = None,
     ) -> None:
         """Start Claude Code in JSON stream mode for event parsing.
 
@@ -275,6 +276,7 @@ class TmuxService:
             initial_prompt: Optional prompt to send after Claude starts.
             context_file: Optional path to context file for --append-system-prompt.
             resume_session_id: Optional session ID for --resume flag.
+            allowed_tools: Optional comma-separated list of allowed tools (e.g., "Bash(git:*),Edit,Write").
 
         Raises:
             SessionNotFoundError: If the tmux session doesn't exist.
@@ -286,32 +288,56 @@ class TmuxService:
 
         logger.info(f"Starting Claude Code (JSON mode) for task {task_id} in session {session_id}")
 
-        # Get shared config directory for hooks
-        config_dir = get_hooks_config_dir()
+        # Set task ID for permission handler to identify which task this session belongs to
+        # Use GLOBAL Claude config (~/.claude/) for auth and preferences
+        # Permission handler will read task policy from database using CHORUS_TASK_ID
+        from config import get_config
+        config = get_config()
+        db_path = Path(config.database.url.replace("sqlite:///", ""))
+        if not db_path.is_absolute():
+            db_path = Path.cwd() / db_path
 
-        # Build the claude command with isolated config
-        env_vars = [f'CLAUDE_CONFIG_DIR="{config_dir}"']
+        # Set environment variables for the task
+        _run_tmux(["set-environment", "-t", session_id, "CHORUS_TASK_ID", str(task_id)])
+        _run_tmux(["set-environment", "-t", session_id, "CHORUS_DB_PATH", str(db_path)])
+
+        # Pass through OAuth token if set
         oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
         if oauth_token:
-            env_vars.append(f'CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"')
-        env_prefix = " ".join(env_vars)
+            _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CODE_OAUTH_TOKEN", oauth_token])
 
-        # Build Claude command with JSON output format
+        # Build Claude command with JSON output format in non-interactive mode
+        # Note: Do NOT use --permission-mode delegate as it removes standard tools when MCP servers are present
+        # Explicitly export environment variables in the command (tmux set-environment doesn't auto-export)
+        env_prefix = f'CHORUS_TASK_ID="{task_id}" CHORUS_DB_PATH="{db_path}"'
+        if oauth_token:
+            env_prefix += f' CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"'
+
         if context_file and context_file.exists():
-            claude_cmd = f'{env_prefix} claude --append-system-prompt "$(cat {context_file})" --output-format stream-json'
+            claude_cmd = '{env_prefix} claude -p "" --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(
+                env_prefix=env_prefix,
+                context_file=context_file
+            )
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            claude_cmd = f"{env_prefix} claude --output-format stream-json"
+            claude_cmd = f'{env_prefix} claude -p "" --output-format stream-json --verbose'
+            logger.debug("Starting Claude (JSON) in -p mode")
 
         # Add resume flag if session ID provided
         if resume_session_id:
             claude_cmd += f" --resume {resume_session_id}"
             logger.debug(f"Resuming Claude session: {resume_session_id}")
 
-        # If there's an initial prompt, pass it directly to Claude as an argument
+        # Add allowed tools if provided
+        if allowed_tools:
+            escaped_tools = allowed_tools.replace('"', '\\"')
+            claude_cmd += f' --allowedTools "{escaped_tools}"'
+            logger.debug(f"Setting allowed tools: {allowed_tools}")
+
+        # If there's an initial prompt, replace the empty prompt
         if initial_prompt:
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            claude_cmd += f' "{escaped_prompt}"'
+            claude_cmd = claude_cmd.replace('-p ""', f'-p "{escaped_prompt}"', 1)
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
@@ -449,8 +475,10 @@ class TmuxService:
             raise SessionNotFoundError(f"Session {session_id} not found")
 
         # Capture more lines to get all JSON events
+        # -S - captures entire scrollback history (up to tmux's history limit)
+        # -p prints to stdout
         result = _run_tmux(
-            ["capture-pane", "-t", session_id, "-p"],
+            ["capture-pane", "-t", session_id, "-p", "-S", "-"],
             check=False,
         )
         return result.stdout if result.returncode == 0 else ""

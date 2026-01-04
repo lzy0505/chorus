@@ -66,8 +66,11 @@ class JsonMonitor:
 
         while self._running:
             try:
-                # Get all running tasks from database
-                statement = select(Task).where(Task.status == "running")
+                # Get all running and waiting tasks from database
+                from models import TaskStatus
+                statement = select(Task).where(
+                    (Task.status == TaskStatus.running) | (Task.status == TaskStatus.waiting)
+                )
                 tasks = self.db.exec(statement).all()
 
                 for task in tasks:
@@ -89,6 +92,141 @@ class JsonMonitor:
             task.cancel()
         logger.info("JSON monitor stopped")
 
+    def _format_event_log(self, event: ClaudeJsonEvent) -> Optional[str]:
+        """Format a JSON event as a human-readable log entry.
+
+        Args:
+            event: The parsed JSON event
+
+        Returns:
+            Formatted log string or None if event should be skipped
+        """
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        event_type = event.event_type
+
+        match event_type:
+            case "session_start":
+                return f"[{timestamp}] 🚀 Session started"
+
+            case "tool_use":
+                tool_name = event.data.get("toolName", "unknown")
+                tool_input = event.data.get("toolInput", {})
+                file_path = tool_input.get("file_path", "")
+
+                # Build detailed tool info
+                details = []
+                if file_path:
+                    details.append(f"file: {file_path}")
+
+                # Add other relevant parameters
+                for key in ["pattern", "command", "old_string", "new_string", "content"]:
+                    if key in tool_input and tool_input[key]:
+                        value = str(tool_input[key])
+                        if len(value) > 50:
+                            value = value[:50] + "..."
+                        details.append(f"{key}: {value}")
+
+                detail_str = ", ".join(details) if details else ""
+                if detail_str:
+                    return f"[{timestamp}] 🔧 {tool_name} → {detail_str}"
+                else:
+                    return f"[{timestamp}] 🔧 {tool_name}"
+
+            case "tool_result":
+                is_error = event.data.get("isError", False)
+                if is_error:
+                    error_content = event.data.get("content", "")
+                    if isinstance(error_content, str) and error_content:
+                        error_preview = error_content[:100] + "..." if len(error_content) > 100 else error_content
+                        return f"[{timestamp}] ❌ Tool failed: {error_preview}"
+                    return f"[{timestamp}] ❌ Tool failed"
+                else:
+                    # Show brief result preview if available
+                    content = event.data.get("content", "")
+                    if isinstance(content, str) and content and len(content) < 200:
+                        return f"[{timestamp}] ✅ Tool completed: {content[:100]}"
+                    return f"[{timestamp}] ✅ Tool completed"
+
+            case "text":
+                content = event.data.get("text", "")
+                # Show meaningful text from Claude
+                content = content.strip()
+                if not content:
+                    return None  # Skip empty text
+                # Don't truncate - let UI handle long content
+                return f"[{timestamp}] 💬 {content}"
+
+            case "assistant":
+                # Extract text content from assistant messages
+                message = event.data.get("message", {})
+                content = message.get("content", [])
+
+                # Collect all text blocks
+                texts = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                        if text:
+                            texts.append(text)
+
+                if not texts:
+                    return None
+
+                # Combine all text blocks (don't truncate - let UI handle long content)
+                combined = " ".join(texts)
+
+                return f"[{timestamp}] 💬 {combined}"
+
+            case "user":
+                # Show user input
+                message = event.data.get("message", {})
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    content = content.strip()
+                elif isinstance(content, list):
+                    # Extract text from content blocks
+                    texts = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            texts.append(block.get("text", ""))
+                    content = " ".join(texts).strip()
+
+                if content:
+                    return f"[{timestamp}] 👤 User: {content}"
+                return None
+
+            case "result":
+                # Show result/completion events
+                result = event.data.get("result", {})
+                # Result can be a string or dict
+                if isinstance(result, dict):
+                    stop_reason = result.get("stopReason", "unknown")
+                    usage = result.get("usage", {})
+                    input_tokens = usage.get("inputTokens", 0)
+                    output_tokens = usage.get("outputTokens", 0)
+                    return f"[{timestamp}] 🏁 Completed (reason: {stop_reason}, tokens: {input_tokens}→{output_tokens})"
+                else:
+                    return f"[{timestamp}] 🏁 Result: {str(result)[:100]}"
+
+            case "permission_request":
+                prompt = event.data.get("prompt", "Permission requested")
+                return f"[{timestamp}] ⚠️  {prompt}"
+
+            case "error":
+                error_msg = event.data.get("error", {}).get("message", "Unknown error")
+                return f"[{timestamp}] ❌ Error: {error_msg}"
+
+            case "system":
+                # Show system events for debugging
+                content = str(event.data)[:100]
+                return f"[{timestamp}] ⚙️  System: {content}"
+
+            case _:
+                # Show unknown events for debugging
+                return f"[{timestamp}] ❓ {event_type}: {str(event.data)[:100]}"
+
     async def _monitor_task(self, task_id: UUID):
         """Monitor a specific task for JSON events.
 
@@ -99,6 +237,23 @@ class JsonMonitor:
 
         while self._running:
             try:
+                # Check if task still exists in database
+                statement = select(Task).where(Task.id == task_id)
+                task = self.db.exec(statement).first()
+                if not task:
+                    logger.info(f"Task {task_id} no longer exists, stopping monitoring")
+                    break
+
+                # Check if tmux session still exists
+                if not self.tmux.session_exists(task_id):
+                    logger.info(f"Tmux session for task {task_id} terminated")
+                    # Update status to stopped when Claude process exits
+                    task.claude_status = ClaudeStatus.stopped
+                    task.claude_activity = None
+                    self.db.commit()
+                    # Stop monitoring this task
+                    break
+
                 # Capture JSON events from tmux
                 output = self.tmux.capture_json_events(task_id)
 
@@ -106,23 +261,31 @@ class JsonMonitor:
                     # Parse events
                     events = self.json_parser.parse_output(output)
 
-                    # Only process new events (simple deduplication)
-                    previous_count = self._last_event_count.get(task_id, 0)
-                    new_events = events[previous_count:]
+                    # Process ALL events each time - let log buffer handle deduplication
+                    # (the 10K char buffer naturally handles old events)
+                    if events:
+                        logger.debug(f"Task {task_id}: Processing {len(events)} events")
 
-                    if new_events:
-                        logger.debug(f"Task {task_id}: Found {len(new_events)} new events")
-
-                        # Process each new event
-                        for event in new_events:
+                        # Process each event
+                        for event in events:
                             await self._handle_event(task_id, event)
-
-                        # Update event count
-                        self._last_event_count[task_id] = len(events)
 
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Error monitoring task {task_id}: {e}", exc_info=True)
+                # Check if it's a session error - if so, update status and stop monitoring
+                if "not found" in str(e).lower():
+                    logger.info(f"Session for task {task_id} not found, updating status")
+                    try:
+                        statement = select(Task).where(Task.id == task_id)
+                        task = self.db.exec(statement).first()
+                        if task:
+                            task.claude_status = ClaudeStatus.stopped
+                            task.claude_activity = None
+                            self.db.commit()
+                    except Exception as db_error:
+                        logger.error(f"Error updating task status: {db_error}")
+                    break
                 await asyncio.sleep(self.poll_interval)
 
     async def _handle_event(self, task_id: UUID, event: ClaudeJsonEvent):
@@ -147,6 +310,16 @@ class JsonMonitor:
             event_type = event.event_type
             logger.debug(f"Task {task_id}: Handling event type '{event_type}'")
 
+            # Format event as log entry and append to last_output
+            log_entry = self._format_event_log(event)
+            log_updated = False
+            if log_entry:
+                current_output = task.last_output or ""
+                # Keep last ~10000 chars to show more history
+                new_output = (current_output + "\n" + log_entry)[-10000:]
+                task.last_output = new_output
+                log_updated = True
+
             match event_type:
                 case "session_start":
                     # Extract Claude session ID for --resume support (not for hooks!)
@@ -154,12 +327,63 @@ class JsonMonitor:
                     if session_id:
                         task.claude_session_id = session_id
                         task.claude_status = ClaudeStatus.idle
+                        # If task was waiting, set back to running
+                        from models import TaskStatus
+                        if task.status == TaskStatus.waiting:
+                            task.status = TaskStatus.running
+                            task.permission_prompt = None
                         logger.info(f"Task {task_id}: Claude session started, ID={session_id}")
                         self.db.commit()
+
+                case "assistant":
+                    # Assistant messages may contain tool_use blocks - extract and process them
+                    message = event.data.get("message", {})
+                    content = message.get("content", [])
+
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            # Extract tool information
+                            tool_name = block.get("name", "unknown")
+                            tool_input = block.get("input", {})
+                            file_path = tool_input.get("file_path")
+                            tool_id = block.get("id")
+
+                            logger.debug(f"Task {task_id}: Tool use from assistant - {tool_name}")
+
+                            # Store tool_use for pairing with tool_result
+                            if task_id not in self._recent_tool_uses:
+                                self._recent_tool_uses[task_id] = []
+                            self._recent_tool_uses[task_id].append({
+                                "id": tool_id,
+                                "toolName": tool_name,
+                                "toolInput": tool_input
+                            })
+                            self._recent_tool_uses[task_id] = self._recent_tool_uses[task_id][-10:]
+
+                            # Call pre-tool hook for file edits
+                            if tool_name in ["Edit", "Write", "MultiEdit"] and file_path:
+                                logger.info(f"Task {task_id}: Calling pre-tool hook for {file_path}")
+                                try:
+                                    self.gitbutler.call_pre_tool_hook(
+                                        session_id=str(task_id),
+                                        file_path=file_path,
+                                        transcript_path=transcript_path,
+                                        tool_name=tool_name
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Pre-tool hook failed: {e}", exc_info=True)
+
+                    self.db.commit()
 
                 case "tool_use":
                     # Claude is using a tool
                     task.claude_status = ClaudeStatus.busy
+                    # If task was waiting, set back to running
+                    from models import TaskStatus
+                    if task.status == TaskStatus.waiting:
+                        task.status = TaskStatus.running
+                        task.permission_prompt = None
+
                     tool_name = event.data.get("toolName", "unknown")
                     tool_input = event.data.get("toolInput", {})
                     file_path = tool_input.get("file_path")
@@ -251,25 +475,67 @@ class JsonMonitor:
                         logger.debug(f"Task {task_id}: Extracted Claude session_id={session_id}")
                         self.db.commit()
 
-                    # Mark as idle
-                    task.claude_status = ClaudeStatus.idle
-                    self.db.commit()
+                    # Check for permission denials (for -p mode workflow)
+                    denial = self.json_parser.detect_permission_denial(event)
+                    if denial:
+                        import json as json_lib
+                        task.pending_permission = json_lib.dumps(denial)
+                        from models import TaskStatus
+                        task.status = TaskStatus.waiting
+                        task.claude_status = ClaudeStatus.waiting
+                        task.permission_prompt = f"Permission needed: {denial['tool']}" + (
+                            f" ({denial['command']})" if denial.get('command') else ""
+                        )
+                        logger.info(f"Task {task_id}: Permission denial detected - {denial}")
+                        self.db.commit()
+                    else:
+                        # Mark as idle only if no permission denial
+                        task.claude_status = ClaudeStatus.idle
+                        self.db.commit()
 
                 case "text" | "assistant":
-                    # Claude is responding, mark as busy
-                    if task.claude_status != ClaudeStatus.busy:
-                        task.claude_status = ClaudeStatus.busy
+                    # Check for permission denials in assistant messages
+                    denial = self.json_parser.detect_permission_denial(event)
+                    if denial:
+                        import json as json_lib
+                        task.pending_permission = json_lib.dumps(denial)
+                        from models import TaskStatus
+                        task.status = TaskStatus.waiting
+                        task.claude_status = ClaudeStatus.waiting
+                        task.permission_prompt = f"Permission needed: {denial['tool']}" + (
+                            f" ({denial['command']})" if denial.get('command') else ""
+                        )
+                        logger.info(f"Task {task_id}: Permission denial detected - {denial}")
+                        self.db.commit()
+                    else:
+                        # Claude is responding, mark as busy
+                        if task.claude_status != ClaudeStatus.busy:
+                            task.claude_status = ClaudeStatus.busy
+                        # If task was waiting, set back to running
+                        from models import TaskStatus
+                        if task.status == TaskStatus.waiting:
+                            task.status = TaskStatus.running
+                            task.permission_prompt = None
                         self.db.commit()
 
                 case "permission_request":
-                    # Claude is asking for permission
+                    # Claude is asking for permission - update both statuses
+                    from models import TaskStatus
+                    task.status = TaskStatus.waiting
                     task.claude_status = ClaudeStatus.waiting
-                    logger.info(f"Task {task_id}: Permission request")
+                    # Extract permission prompt if available
+                    prompt = event.data.get("prompt", "Permission requested")
+                    task.permission_prompt = prompt
+                    logger.info(f"Task {task_id}: Permission request - {prompt}")
                     self.db.commit()
 
                 case _:
                     # Unknown event type, log for debugging
                     logger.debug(f"Task {task_id}: Unknown event type '{event_type}'")
+
+            # Ensure log updates are committed even if event type didn't commit
+            if log_updated:
+                self.db.commit()
 
         except Exception as e:
             logger.error(f"Error handling event for task {task_id}: {e}", exc_info=True)
