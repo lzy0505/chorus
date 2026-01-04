@@ -102,6 +102,59 @@ def cleanup_task_claude_config(task_id: UUID) -> None:
         logger.info(f"Removed task-specific Claude config at {config_dir}")
 
 
+def ensure_global_permission_hook() -> None:
+    """Ensure the PermissionRequest hook is registered in global Claude config.
+
+    This registers the Chorus permission handler in ~/.claude/settings.json
+    so all Claude sessions can use the web UI permission system.
+    """
+    global_settings_file = Path.home() / ".claude" / "settings.json"
+
+    # Read existing settings or create new
+    if global_settings_file.exists():
+        with open(global_settings_file, "r") as f:
+            settings = json.load(f)
+    else:
+        global_settings_file.parent.mkdir(parents=True, exist_ok=True)
+        settings = {}
+
+    # Add PermissionRequest hook if not already present
+    if "hooks" not in settings:
+        settings["hooks"] = {}
+
+    hook_config = {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": "/tmp/chorus/hooks/permission-handler.py",
+                "timeout": 300
+            }
+        ]
+    }
+
+    # Check if hook already exists
+    existing_hooks = settings["hooks"].get("PermissionRequest", [])
+    hook_exists = any(
+        h.get("hooks", [{}])[0].get("command") == "/tmp/chorus/hooks/permission-handler.py"
+        for h in existing_hooks
+        if h.get("hooks")
+    )
+
+    if not hook_exists:
+        if "PermissionRequest" not in settings["hooks"]:
+            settings["hooks"]["PermissionRequest"] = []
+        settings["hooks"]["PermissionRequest"].append(hook_config)
+
+        # Write updated settings
+        with open(global_settings_file, "w") as f:
+            json.dump(settings, f, indent=2)
+
+        logger.info("Registered Chorus permission hook in global Claude config")
+    else:
+        logger.debug("Chorus permission hook already registered globally")
+
+
 def get_default_permission_policy() -> Dict[str, Any]:
     """Get the default permission policy for new tasks.
 

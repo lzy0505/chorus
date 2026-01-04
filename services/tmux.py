@@ -286,22 +286,17 @@ class TmuxService:
 
         logger.info(f"Starting Claude Code (JSON mode) for task {task_id} in session {session_id}")
 
-        # Set task-specific Claude config directory for per-task hooks
-        from services.claude_config import get_task_config_dir
-        task_config_dir = get_task_config_dir(task_id)
-
-        # Set environment variables in the tmux session so they persist
-        # and are inherited by Claude and all its subprocesses (including permission handler)
-        # CLAUDE_CONFIG_DIR should point to the .claude directory
-        claude_config_dir = task_config_dir / ".claude"
-        _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CONFIG_DIR", str(claude_config_dir)])
-
-        # Set CHORUS_DB_PATH for permission handler script
+        # Set task ID for permission handler to identify which task this session belongs to
+        # Use GLOBAL Claude config (~/.claude/) for auth and preferences
+        # Permission handler will read task policy from database using CHORUS_TASK_ID
         from config import get_config
         config = get_config()
         db_path = Path(config.database.url.replace("sqlite:///", ""))
         if not db_path.is_absolute():
             db_path = Path.cwd() / db_path
+
+        # Set environment variables for the task
+        _run_tmux(["set-environment", "-t", session_id, "CHORUS_TASK_ID", str(task_id)])
         _run_tmux(["set-environment", "-t", session_id, "CHORUS_DB_PATH", str(db_path)])
 
         # Pass through OAuth token if set
@@ -309,14 +304,21 @@ class TmuxService:
         if oauth_token:
             _run_tmux(["set-environment", "-t", session_id, "CLAUDE_CODE_OAUTH_TOKEN", oauth_token])
 
-        # Build Claude command with JSON output format
-        # Note: --verbose is required when using -p with --output-format stream-json
-        # Use -p flag to enable permission prompts (handled by PermissionRequest hooks)
+        # Build Claude command with JSON output format in non-interactive mode
+        # Always use -p with empty prompt for non-interactive mode
+        # Explicitly export environment variables in the command (tmux set-environment doesn't auto-export)
+        env_prefix = f'CHORUS_TASK_ID="{task_id}" CHORUS_DB_PATH="{db_path}"'
+        if oauth_token:
+            env_prefix += f' CLAUDE_CODE_OAUTH_TOKEN="{oauth_token}"'
+
         if context_file and context_file.exists():
-            claude_cmd = 'claude -p --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(context_file=context_file)
+            claude_cmd = '{env_prefix} claude -p "" --permission-mode delegate --append-system-prompt "$(cat {context_file})" --output-format stream-json --verbose'.format(
+                env_prefix=env_prefix,
+                context_file=context_file
+            )
             logger.debug(f"Starting Claude (JSON) with context file: {context_file}")
         else:
-            claude_cmd = "claude -p --output-format stream-json --verbose"
+            claude_cmd = f'{env_prefix} claude -p "" --permission-mode delegate --output-format stream-json --verbose'
             logger.debug("Starting Claude (JSON) with per-task permission hooks")
 
         # Add resume flag if session ID provided
@@ -324,12 +326,10 @@ class TmuxService:
             claude_cmd += f" --resume {resume_session_id}"
             logger.debug(f"Resuming Claude session: {resume_session_id}")
 
-        # If there's an initial prompt, append it to the -p flag
+        # If there's an initial prompt, replace the empty prompt
         if initial_prompt:
             escaped_prompt = initial_prompt.replace('"', '\\"')
-            # Remove -p from claude_cmd if it's already there and add it with the prompt
-            claude_cmd = claude_cmd.replace(" -p ", " ")
-            claude_cmd = claude_cmd.replace("claude ", f'claude -p "{escaped_prompt}" ', 1)
+            claude_cmd = claude_cmd.replace('-p ""', f'-p "{escaped_prompt}"', 1)
             logger.debug(f"Starting Claude with initial prompt: {initial_prompt[:100]}...")
 
         # Send the claude command
