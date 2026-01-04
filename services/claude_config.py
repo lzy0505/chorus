@@ -70,7 +70,7 @@ def create_task_claude_config(task_id: UUID, permission_policy: Optional[Dict[st
                         {
                             "type": "command",
                             "command": "/tmp/chorus/hooks/permission-handler.py",
-                            "timeout": 10
+                            "timeout": 300
                         }
                     ]
                 }
